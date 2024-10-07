@@ -6,4 +6,4 @@ Pytorch port of: <a href="https://arxiv.org/abs/2010.13821">Yu et al. 2020</a>
 
 Due to time constraints the inverse transformation is not ported.
 
-For questions: m.m.a.valiuddin@tue.nl
+Edited by Matiwos Mebratu to add sampling and handle hybrid priors.

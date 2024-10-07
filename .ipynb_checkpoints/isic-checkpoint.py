@@ -2,11 +2,11 @@ path = 'data/isic'
 augmentation = True
 affineTransform = True
 imageAug = False
-in_channels = 3
+in_channels = 2
 weight_decay = 5e-5
-patch_size = [128,128]
+patch_size = [64,64]
 lr = 1e-4
-batch_size = 8
+batch_size = 32
 grayscale = False
 
 degrees = [-180, 180]

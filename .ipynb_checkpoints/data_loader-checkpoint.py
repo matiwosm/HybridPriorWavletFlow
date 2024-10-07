@@ -88,11 +88,10 @@ class ISIC(Dataset):
         # Delay loading LMDB data until after initialization
         if self.env is None:
             self._init_db()
-        # self.list.append(index)
+        self.list.append(index)
         with self.env.begin() as txn:
-            lmdb_data = np.frombuffer(txn.get('{:08}'.format(index).encode('ascii')), dtype=np.float32).astype(np.float64).reshape((2, 64, 64)).copy() #.astype(np.float32)
-            # lmdb_data = self.scale_data(lmdb_data)
-            lmdb_data = lmdb_data[0:1, :, :]
+            lmdb_data = np.frombuffer(txn.get('{:08}'.format(index).encode('ascii')), dtype=np.float64).astype(np.float64).reshape((5, 64, 64)).copy().astype(np.float32)
+            lmdb_data = self.scale_data(lmdb_data)
             # lmdb_data = np.flip(lmdb_data, axis=0)
         return lmdb_data
 
@@ -128,7 +127,7 @@ class ISIC(Dataset):
         lmdb_data[4, :, :] = np.sign(lmdb_data[4, :, :])*(np.log(np.abs(lmdb_data[4, :, :])/rad_std + 1))
         lmdb_data[4, :, :] = (lmdb_data[4, :, :] - trans_rad_mean)/trans_rad_std
 
-        return lmdb_data[:1, :, :]
+        return lmdb_data[:2, :, :]
     
     def reverse_scale(self, images):
         kap_mean =  0.0024131738313520608 
@@ -168,7 +167,7 @@ class ISIC(Dataset):
         return self.env.stat()
 
     def __len__(self):
-        return self.get_stat()['entries'] - 1
+        return self.get_stat()['entries']
 
     def __repr__(self):
         return self.__class__.__name__ + ' (' + self.db_path + ')'

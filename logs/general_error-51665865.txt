@@ -1,0 +1,1 @@
+slurmstepd: error: *** JOB 51665865 ON sdfampere038 CANCELLED AT 2024-07-02T21:21:10 ***

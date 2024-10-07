@@ -38,7 +38,7 @@ class Affine(nn.Module):
         # print('1', torch.any(torch.isnan(x)))
         s, t, z1, z2 = self.get_param(x, conditioning)
         if reverse:
-            # s = torch.sigmoid(s + 2.0)
+            s = torch.sigmoid(s + 2.0)
             z2 = z2 / s
             z2 = z2 - t
             logdet = -torch.sum(torch.log(s), dim=[1, 2, 3]) + logdet
@@ -199,62 +199,6 @@ class CycleMask(nn.Module):
             logdet = torch.sum(s, dim=[1, 2, 3]) + logdet
         z = z1 * self.mask_in + z2 * (1 - self.mask_in)
         return z, logdet
-    
-class MyCheckerboard(nn.Module):
-    def __init__(self, in_channels, out_channels, H, W, hidden_channels, parity, conditional=True):
-        super().__init__()
-        if conditional:
-            self.block = ConvNet(in_channels + 1, out_channels * 2, hidden_channels)
-        else:
-            self.block = ConvNet(in_channels, out_channels * 2, hidden_channels)
-        self.mask = self.make_checker_mask((1, 1, H, W), parity)
-        # print('MyCheckerboard', self.mask, parity, H, W)
-        # print(conditional, H, W)
-    def make_checker_mask(self, shape, parity):
-        checker = torch.ones(shape, dtype=torch.uint8) - parity
-        checker[:, :, ::2, ::2] = parity
-        checker[:, :, 1::2, 1::2] = parity
-        return checker.to('cuda')
-        
-    def forward(self, x, logdet, conditioning=None, reverse=False):
-        if not reverse:
-            return self.normal_flow(x, logdet, conditioning)
-        else:
-            return self.reverse_flow(x, logdet, conditioning)
-        
-    def normal_flow(self, x, logdet, conditioning):
-        x_frozen = self.mask * x
-        x_active = (1 - self.mask) * x
-        if conditioning is not None:
-            z1_c = torch.cat([x_frozen, conditioning], dim=1)
-            h = self.block(z1_c)
-        else:
-            h = self.block(x_frozen)
-        s, t = split_feature(h, "cross")
-        # s = torch.sigmoid(s + 2.0)
-        fx = (1 - self.mask) * t + x_active * torch.exp(s) + x_frozen
-        axes = range(1,len(s.size()))
-        logJ = torch.sum((1 - self.mask) * s, dim=tuple(axes))
-        # print(logJ)
-        return fx, logJ + logdet
-    
-    def reverse_flow(self, fx, logdet, conditioning):
-        fx_frozen = self.mask * fx
-        fx_active = (1 - self.mask) * fx
-        if conditioning is not None:
-            # print('in reverse flow', fx_frozen.shape, conditioning.shape)
-            z1_c = torch.cat([fx_frozen, conditioning], dim=1)
-            h = self.block(z1_c)
-        else:
-            # print('in reverse flow', fx_frozen.shape)
-            h = self.block(fx_frozen)
-        s, t = split_feature(h, "cross")
-        # print(s, t)
-        # s = torch.sigmoid(s + 2.0)
-        x = (fx_active - (1 - self.mask) * t) * torch.exp(-s) + fx_frozen
-        axes = range(1,len(s.size()))
-        logJ = torch.sum((1 - self.mask)*(-s), dim=tuple(axes))
-        return x, logJ + logdet
 
 class Checkerboard(nn.Module):
     def __init__(self, in_channels, out_channels, H, W, hidden_channels, conditional=True):
@@ -266,12 +210,10 @@ class Checkerboard(nn.Module):
 
         checkerboard = [[((i % 2) + j) % 2 for j in range(W)] for i in range(H)]
         self.mask = torch.tensor(checkerboard, requires_grad=False).view(1, 1, H, W)
-        print('in Checkerboard', checkerboard, H, W, self.mask)
         self.rescale = nn.utils.weight_norm(Rescale(in_channels))
 
     def get_param(self, x, conditioning):
         self.mask = self.mask.to(x.get_device())
-        # print('mask', self.mask, '1-mask', 1-self.mask)
         z1 = x * self.mask
         if conditioning is not None:
             z1_c = torch.cat([z1, conditioning], dim=1)
@@ -288,7 +230,7 @@ class Checkerboard(nn.Module):
         s, t = self.get_param(x, conditioning)
         exp_s = s.exp()
         if reverse:
-            z = x/exp_s - t
+            z = x * exp_s - t
             logdet = -torch.sum(s, dim=[1, 2, 3]) + logdet
         else:
             z = (x + t) * exp_s
@@ -344,8 +286,6 @@ class Rescale(nn.Module):
         super(Rescale, self).__init__()
         self.weight = nn.Parameter(torch.ones(num_channels, 1, 1))
 
-    def forward(self, x, reverse=False):
-        if reverse:
-            return x / self.weight  # Inverse scaling
-        else:
-            return x * self.weight  # Forward scaling
+    def forward(self, x):
+        x = self.weight * x
+        return x

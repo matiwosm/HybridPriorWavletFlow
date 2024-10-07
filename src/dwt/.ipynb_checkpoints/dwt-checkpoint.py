@@ -15,7 +15,7 @@ class Dwt(nn.Module):
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.dwt = DWTForward(J=1, wave='haar', mode='zero').to(device)  # 1 level DWT using Haar
         self.idwt = DWTInverse(wave='haar', mode='zero').to(device)
-        # print('device', device)
+        print('device', device)
     def forward(self, x):
         C = x.shape[1]
         H = x.shape[2]

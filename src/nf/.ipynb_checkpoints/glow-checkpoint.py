@@ -13,26 +13,26 @@ class FlowStep(nn.Module):
     def __init__(self, params, C, H, W, idx, conditional):
         super().__init__()
         hidden_channels = params.hiddenChannels
-        # self.flow_permutation = params.perm
+        self.flow_permutation = params.perm
         self.flow_coupling = params.coupling
         self.actnorm = ActNorm2d(C, params.actNormScale)
 
-        # # 2. permute
-        # if self.flow_permutation == "invconv":
-        #     self.invconv = InvertibleConv1x1(C, LU_decomposed=params.LU)
-        #     self.flow_permutation = lambda z, logdet, rev: self.invconv(z, logdet, rev)
-        # elif self.flow_permutation == "shuffle":
-        #     self.shuffle = Permute2d(C, shuffle=True)
-        #     self.flow_permutation = lambda z, logdet, rev: (self.shuffle(z, rev), logdet,)
-        # else:
-        #     self.reverse = Permute2d(C, shuffle=False)
-        #     self.flow_permutation = lambda z, logdet, rev: (self.reverse(z, rev), logdet,)
+        # 2. permute
+        if self.flow_permutation == "invconv":
+            self.invconv = InvertibleConv1x1(C, LU_decomposed=params.LU)
+            self.flow_permutation = lambda z, logdet, rev: self.invconv(z, logdet, rev)
+        elif self.flow_permutation == "shuffle":
+            self.shuffle = Permute2d(C, shuffle=True)
+            self.flow_permutation = lambda z, logdet, rev: (self.shuffle(z, rev), logdet,)
+        else:
+            self.reverse = Permute2d(C, shuffle=False)
+            self.flow_permutation = lambda z, logdet, rev: (self.reverse(z, rev), logdet,)
 
         # 3. coupling
         if params.coupling == 'affine':
             self.coupling = Affine(C, C, hidden_channels, conditional)
         elif params.coupling == 'checker':
-            self.coupling = MyCheckerboard(C, C, H, W, hidden_channels, idx%2, conditional)
+            self.coupling = Checkerboard(C, C, H, W, hidden_channels, conditional)
         elif params.coupling == 'checker3d':
             self.coupling = Checkerboard3D(C, C, H, W, hidden_channels, conditional)
         elif params.coupling == 'cycle':
@@ -49,11 +49,11 @@ class FlowStep(nn.Module):
             return self.reverse_flow(input, conditioning, logdet)
 
     def normal_flow(self, input, conditioning, logdet):
-        # z = input
+
         # 1. actnorm
         z, logdet = self.actnorm(input, logdet=logdet)
         # 2. permute
-        # z, logdet = self.flow_permutation(z, logdet, False)
+        z, logdet = self.flow_permutation(z, logdet, False)
         # 3. coupling
         z, logdet = self.coupling(z, logdet, conditioning)
         return z, logdet
@@ -64,7 +64,7 @@ class FlowStep(nn.Module):
         z, logdet = self.coupling(input, logdet, conditioning, reverse=True)
 
         # 2. permute
-        # z, logdet = self.flow_permutation(z, logdet, True)
+        z, logdet = self.flow_permutation(z, logdet, True)
 
         # 3. actnorm
         z, logdet = self.actnorm(z, logdet=logdet, reverse=True)
@@ -114,30 +114,59 @@ class FlowNet(nn.Module):
 
 
 class Glow(nn.Module):
-    def __init__(self, params, shape, conditional, corr_prior):
+    def __init__(self, params, shape, conditional):
         super().__init__()
         self.flow = FlowNet(params, shape, conditional)
         self.y_classes = params.y_classes
         self.y_condition = params.y_condition
         self.learn_top = params.y_learn_top
-        self.corr_prior = corr_prior
+        
+        # learned prior
+        if self.learn_top:
+            C = self.flow.output_shapes[-1][1]
+            self.learn_top_fn = Conv2dZeros(C * 2, C * 2)
 
+        if self.y_condition:
+            C = self.flow.output_shapes[-1][1]
+            self.project_ycond = LinearZeros(self.y_classes, 2 * C)
+            self.project_class = LinearZeros(C, self.y_classes)
+
+        self.register_buffer("prior_h", torch.zeros(
+            [1, self.flow.output_shapes[-1][1] * 2, self.flow.output_shapes[-1][2],
+                self.flow.output_shapes[-1][3], ]), )
+
+    def prior(self, data, y_onehot=None):
+        if data is not None:
+            h = self.prior_h.repeat(data.shape[0], 1, 1, 1)
+        else:
+            # Hardcoded a batch size of 32 here
+            h = self.prior_h.repeat(32, 1, 1, 1)
+
+        channels = h.size(1)
+
+        if self.learn_top:
+            h = self.learn_top_fn(h)
+
+        if self.y_condition:
+            assert y_onehot is not None
+            yp = self.project_ycond(y_onehot)
+            h += yp.view(h.shape[0], channels, 1, 1)
+        return split_feature(h, "split")
 
     def forward(self, x=None, conditioning=None, y_onehot=None, z=None, temperature=None, reverse=False, **kwargs):
         if reverse:
-            return self.reverse_flow(x, conditioning, y_onehot, temperature)
+            return self.reverse_flow(z, conditioning, y_onehot, temperature)
         else:
             return self.normal_flow(x, conditioning, y_onehot)
 
     def normal_flow(self, x, conditioning, y_onehot):
         b, c, h, w = x.shape
 
-        # x, logdet = uniform_binning_correction(x)
-        logdet = torch.zeros_like(x)[:, 0, 0, 0]
-        z, objective = self.flow(x, conditioning, logdet=logdet, reverse=False)
+        x, logdet = uniform_binning_correction(x)
 
-        # print('in normal flow', z[0])
-        objective += self.corr_prior.log_prob(z) 
+        z, objective = self.flow(x, conditioning, logdet=logdet, reverse=False)
+        mean, logs = self.prior(x, y_onehot)
+        objective += gaussian_likelihood(mean, logs, z)
         if self.y_condition:
             y_logits = self.project_class(z.mean(2).mean(2))
         else:
@@ -148,24 +177,13 @@ class Glow(nn.Module):
         return {"latent": z, "likelihood": bpd, "y_logits": y_logits}
 
     def reverse_flow(self, z, conditioning, y_onehot, temperature):
-        # print('in reverse flow')
-        # print('z = ', z[0])
-        # logdet = torch.zeros(z.shape[0]).to(z.device)
         with torch.no_grad():
             if z is None:
-                print('z is none')
-                z = self.corr_prior.sample_n(32)
+                mean, logs = self.prior(z, y_onehot)
+                z = gaussian_sample(mean, logs, temperature)
             x, logdet = self.flow(z, conditioning, temperature=temperature, reverse=True)
-            # z1, obj = self.flow(x, conditioning, logdet=logdet, temperature=temperature)
-        #     print('z1 = ', z1[0])
-        #     print(torch.all(z == z1))
-        # print('end of reverse flow')
         return x, logdet
-    
-    def sample_latents(self, n_batch=64,temperature=1.0):
-        z = self.corr_prior.sample_n(n_batch).type(torch.float64)
-        # print(z.shape, z.dtype)
-        return z
+
     def set_actnorm_init(self):
         for name, m in self.named_modules():
             if isinstance(m, ActNorm2d):

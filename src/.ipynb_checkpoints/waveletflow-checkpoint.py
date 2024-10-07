@@ -7,7 +7,7 @@ import torch
 import numpy as np
 
 class WaveletFlow(nn.Module):
-    def __init__(self, cf, cond_net, partial_level=-1, prior=None, stds=None):
+    def __init__(self, cf, cond_net, partial_level=-1):
         super().__init__()
         self.n_levels = cf.nLevels
         self.base_level = cf.baseLevel
@@ -15,14 +15,13 @@ class WaveletFlow(nn.Module):
         self.wavelet = Haar()
         self.dwt = Dwt(wavelet=self.wavelet)
         self.conditioning_network = cond_net
-        self.stds = stds
         
         if partial_level == -1 or partial_level == self.base_level:
             base_size = 2 ** self.base_level
             cf.K = cf.stepsPerResolution[partial_level]
             cf.L = cf.stepsPerResolution_L[partial_level]
             shape = (cf.imShape[0], base_size, base_size)
-            self.base_flow = Glow(cf, shape, False, prior)
+            self.base_flow = Glow(cf, shape, False)
         else:
             self.base_flow = None
         
@@ -38,47 +37,29 @@ class WaveletFlow(nn.Module):
                 cf.K = cf.stepsPerResolution[level-1]
                 cf.L = cf.stepsPerResolution_L[level-1]
                 shape = (cf.imShape[0] * 3, h, w)
-                self.sub_flows.append(Glow(cf, shape, cf.conditional, prior))
+                self.sub_flows.append(Glow(cf, shape, cf.conditional))
 
         self.sub_flows = nn.ModuleList(self.sub_flows)
         # print(self.sub_flows)
-    def normalize(self, x, level, comp):
-        if comp == 'low':
-            x = x/self.stds[level - self.base_level][0]
-            # print('normalize low', torch.std(x), x.shape)
-        elif comp == 'high':
-            for i in range(3):
-                x[:, i, :, :] = x[:, i, :, :]/self.stds[level - self.base_level][i+1]
-                # print('normalize high', torch.std(x[:, i, :, :]), x.shape)
-        return x
     def forward(self, x, partial_level=-1):
 
         latents = []
         low_freq = x 
         # print('before everything', x.shape, 'partial_level', partial_level, '\n')
         for level in range(self.n_levels, self.base_level-1, -1):
-            # print('in forward level', level, '\n')
+            # print('level', level, '\n')
             if level == partial_level or partial_level == -1:
                 if level == self.base_level:
-                    # print("in forward in if")
                     flow = self.base_flow
                     conditioning = None
-                    # lk = torch.zeros(dwt_components['low'].shape[0]).to('cuda')
-                    # res = {"latent":dwt_components['low'], "likelihood": lk}
-                    low_freq = self.normalize(dwt_components['low'], level, 'low')
-                    res = flow.forward(low_freq, conditioning=conditioning)
+                    res = flow.forward(dwt_components['low'], conditioning=conditioning)
                 else:
-                    # print("in forward in else")
                     dwt_components = self.dwt.forward(low_freq)
                     low_freq = dwt_components['low']
-                    low_freq = self.normalize(dwt_components['low'], level, 'low')
                     conditioning = self.conditioning_network.encoder_list[level](low_freq)
                     flow = self.sub_flows[level]
-                    # lk = torch.zeros(dwt_components['high'].shape[0]).to('cuda')
-                    # res = {"latent":dwt_components['high'], "likelihood": lk}
-                    high_freq = self.normalize(dwt_components['high'], level, 'high')
-                    res = flow.forward(high_freq, conditioning=conditioning)
-                # print('in forward res', res["latent"].shape, res["latent"][partial_level], '\n')
+                    res = flow.forward(dwt_components['high'], conditioning=conditioning)
+                # print('res', res['latent'].shape, '\n')
                 latents.append(res["latent"])
                 b, c, h, w = low_freq.shape
                 res["likelihood"] -= (c * h * w * torch.log(torch.tensor(0.5)) * (self.n_levels - level)) /  (math.log(2.0) * c * h * w)
@@ -99,66 +80,38 @@ class WaveletFlow(nn.Module):
 
         return {"latent":latents, "likelihood":res["likelihood"]}
     
-    def sample_latents(self,n_batch=64,temperature=1.0):
-        latents = [self.base_flow.sample_latents(n_batch=n_batch,temperature=temperature)]
-        for level in range(1,self.n_levels+1):
-            flow = self.sub_flows[level]
+    def sample_latents(self,n_batch=1,temperature=1.0):
+        latents = [None]*self.base_level
+
+        for flow in self.sub_flows:
             if flow == None:
                 latents.append(None)
             else:
                 latents.append(flow.sample_latents(n_batch=n_batch,temperature=temperature))
         return latents
     
-    def sample(self, target=None, latents=None, partial_level=-1, comp='low'):
-        #x = None for actual sampling
-        #testing sampler by conditioning on data 
-        data = []
-        if target is not None:
-            # prixnt("conditioning on target")
-            # data.append(target)
-            # for i in range(self.base_level+1,self.n_levels+1):
-            #     target = self.dwt.forward(target)['low']
-            #     data.append(target)
-            # data.reverse()
-            data = target
-
-        # for i in range(len(data)):
-        #     print(data[i].shape)
-        if latents is None:
-            latents = self.sample_latents(n_batch=64,temperature=1.0)
+    def sample(self, partial_level=-1):
         samples = []
-        # base = latents[0]
+        latents = self.sample_latents(n_batch=32,temperature=1.0)
         base = self.base_flow.forward(latents[0], conditioning=None,temperature=1.0, reverse=True)[0]
-        if target is not None:
-            #condition on data 
-            base = data[0]
-            # print(base.shape)
-        samples.append(base)
-        # print('base = ', base.shape)
+        print('base = ', base.shape)
         # print(latents[0])
         level = self.base_level if partial_level == -1 else partial_level
         # print(latents)
         for level in range(self.base_level+1,self.n_levels+1):
             latent = latents[level]
             flow = self.sub_flows[level]
-            # print(level, flow)
             if flow is not None:
-                # print(level, 'latent', base.shape, latent.shape)
+                # print(level, 'latent', latent.shape)
                 conditioning = self.conditioning_network.encoder_list[level](base)
                 # print(conditioning.device, latent.device)
-                # x = latent
-                x = flow.forward(latent, conditioning=conditioning,temperature=1.0, reverse=True)[0]
-                if comp == 'high':
-                    samples.append(x)
+                x = flow.forward(latent, conditioning=conditioning,temperature=1.0, reverse=True)
+                print('shape', x[0].shape, x[1].shape, len(x))
                 if level > self.base_level:
-                    # print('before dwt', base.shape, x[0].shape)
-                    x = self.dwt.inverse({'low': base, 'high': x})
+                    print('before dwt', base.shape, x[0].shape)
+                    x = self.dwt.inverse({'low': base, 'high': x[0]})
+                print('after x shape', x.shape)
                 base = x
-                if target is not None:
-                    #condition on data 
-                    base = data[level-self.base_level]
-                    # print('bottom', base.shape)
-            if comp == 'low':
-                samples.append(x)
+            samples.append(x)
         return samples
 

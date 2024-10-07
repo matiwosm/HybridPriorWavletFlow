@@ -12,8 +12,6 @@ def gaussian_p(mean, logs, x):
             Var = logs ** 2
     """
     c = math.log(2 * math.pi)
-    # print(x.shape)
-    # print(x[:, 0, :, :])
     return -0.5 * (logs * 2.0 + ((x - mean) ** 2) / torch.exp(logs * 2.0) + c)
 
 
@@ -25,6 +23,7 @@ def gaussian_likelihood(mean, logs, x):
 def gaussian_sample(mean, logs, temperature=1):
     # Sample from Gaussian with temperature
     z = torch.normal(mean, torch.exp(logs) * temperature)
+
     return z
 
 
@@ -132,7 +131,7 @@ class _ActNorm(nn.Module):
         else:
             input = self._center(input, reverse)
             input, logdet = self._scale(input, logdet, reverse)
-        # print(self.bias, self.logs)
+
         return input, logdet
 
 

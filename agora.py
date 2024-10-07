@@ -1,0 +1,10 @@
+path = 'data/agora'
+augmentation = True
+affineTransform = True
+imageAug = False
+in_channels = 1
+weight_decay = 5e-5
+patch_size = [64,64]
+lr = 1e-4
+batch_size = 128
+grayscale = False

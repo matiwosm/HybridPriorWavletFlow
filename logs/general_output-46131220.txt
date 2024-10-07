@@ -1,0 +1,1 @@
+-rwxr-xr-x+ 1 mati gu 7664369664 Oct 12  2023 /sdf/scratch/users/m/mati/tensorflow-linux_v4.sif
