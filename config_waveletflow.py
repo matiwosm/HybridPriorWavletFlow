@@ -1,6 +1,6 @@
 model = "waveletflow"
-stepsPerResolution = [8] * 8
-stepsPerResolution_L = [4] * 8
+stepsPerResolution = [8] * 7
+stepsPerResolution_L = [4] * 7
 nLevels = 6
 kernel = 3
 baseLevel = 1

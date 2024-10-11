@@ -358,7 +358,7 @@ if __name__  == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', type=str, default="waveletflow", help='train level')
     parser.add_argument('--hlevel', type=int, default=-1, help='train level')
-    parser.add_argument('--data', type=str, default="isic", help='train level')
+    parser.add_argument('--data', type=str, default="agora", help='train level')
     args = parser.parse_args()
     main()
 

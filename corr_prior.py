@@ -16,7 +16,7 @@ if packaging.version.parse(torch.__version__) < packaging.version.parse('1.5.0')
 
 
 class CorrelatedNormal_dwt:
-    def __init__(self, loc, var,nx, dx,cl_theo,torch_device, freq='high'):
+    def __init__(self, loc, var,nx, dx,cl_theo,torch_device, freq='high', Normal=False):
         self.torch_device=torch_device
         self.nx=nx
         self.dx=dx
@@ -195,7 +195,7 @@ class CorrelatedNormal_dwt:
     
  
 class CorrelatedNormal_single:
-    def __init__(self, loc, var,nx, dx,cl_theo,torch_device, freq='low'):
+    def __init__(self, loc, var,nx, dx,cl_theo,torch_device, freq='low', Normal=False):
         self.torch_device=torch_device
         self.nx=nx
         self.dx=dx

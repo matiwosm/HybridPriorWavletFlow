@@ -96,6 +96,7 @@ def main():
         model = Glow(p).to(device)
     elif args.model == "waveletflow":
         p = SourceFileLoader('cf', 'config_waveletflow.py').load_module()
+        
         #load powerspectra
         if p_level == cf.baseLevel or p_level == cf.baseLevel + 1:
             power_spec = pd.read_csv('ps/dwtlevel_all'+str(2**cf.baseLevel)+'x'+str(2**cf.baseLevel)+'_gauss.dat', sep=";", header=None)
@@ -105,17 +106,27 @@ def main():
 
             if p_level == cf.baseLevel:
                 rfourier_shape = (1, nx, int(nx/2 + 1), 2)
-                prior = corr_prior.CorrelatedNormal_single(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,power_spec,device, freq='low')
+                if p_level not in (cf.gauss_priors):
+                    prior = corr_prior.CorrelatedNormal_single(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,power_spec,device, freq='low')
+                else:
+                    prior = corr_prior.CorrelatedNormal_single(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,power_spec,device, freq='low', Normal=True)
             else:
                 rfourier_shape = (3, nx, int(nx/2 + 1), 2)
-                prior = corr_prior.CorrelatedNormal_dwt(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,power_spec,device, freq='high')
+                if p_level not in (cf.gauss_priors):
+                    prior = corr_prior.CorrelatedNormal_dwt(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,power_spec,device, freq='high')
+                else:
+                    prior = corr_prior.CorrelatedNormal_dwt(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,power_spec,device, freq='high', Normal=True)
         else:
             power_spec = pd.read_csv('ps/dwtlevel_all'+str(2**(p_level-1))+'x'+str(2**(p_level-1))+'_gauss.dat', sep=";", header=None)
             power_spec = (np.array(power_spec))[:, [0, 1, 2, 3, 4]]
             nx = int(64/(2**(6-p_level+1)))
             dx = (0.5/60. * np.pi/180.)*(2**(6-p_level+1))
             rfourier_shape = (3, nx, int(nx/2 + 1), 2)
-            prior = corr_prior.CorrelatedNormal_dwt(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,power_spec,device, freq='high')
+            if p_level not in (cf.gauss_priors):
+                prior = corr_prior.CorrelatedNormal_dwt(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,power_spec,device, freq='high')
+            else:
+                prior = corr_prior.CorrelatedNormal_dwt(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,power_spec,device, freq='high', Normal=True)
+
         model = WaveletFlow(cf=p, cond_net=Conditioning_network(), partial_level=p_level, prior=prior, stds=stds).to(device)
         if resume:
             model.load_state_dict(torch.load(directory_path + selected_files[p_level-1]))
@@ -167,9 +178,9 @@ def main():
         if patience == 10:
             break
 parser = argparse.ArgumentParser()
-parser.add_argument('--model', type=str, default="waveletflow", help='train level')
-parser.add_argument('--level', type=int, default=-1, help='train level')
-parser.add_argument('--data', type=str, default="agora", help='train level')
+parser.add_argument('--model', type=str, default="waveletflow", help='specify model')
+parser.add_argument('--level', type=int, default=-1, help='training level')
+parser.add_argument('--data', type=str, default="agora", help='input data')
 args = parser.parse_args()
 p_level = args.level
 main()
