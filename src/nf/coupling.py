@@ -204,7 +204,7 @@ class MyCheckerboard(nn.Module):
     def __init__(self, in_channels, out_channels, H, W, hidden_channels, parity, conditional=True):
         super().__init__()
         if conditional:
-            self.block = ConvNet(in_channels + 1, out_channels * 2, hidden_channels)
+            self.block = ConvNet(in_channels + int(in_channels/3), out_channels * 2, hidden_channels)
         else:
             self.block = ConvNet(in_channels, out_channels * 2, hidden_channels)
         self.mask = self.make_checker_mask((1, 1, H, W), parity)

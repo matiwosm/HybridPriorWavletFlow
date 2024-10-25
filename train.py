@@ -75,7 +75,7 @@ def main():
     cf = SourceFileLoader('cf', f'{args.data}.py').load_module()
     # dataset = ISIC(cf, benign=True, test=False, gray=cf.grayscale)
     
-    bdir = "/mnt/gaussian_kap_trans_cib_train"
+    bdir = "/mnt/half_yuki_sim_64/"
     file = "data.mdb"
     transformer1 = None
     dataset = ISIC(bdir, file, transformer1, 1, False)
@@ -91,42 +91,47 @@ def main():
         [2.8173, 1.1993,  1.2024,  0.8454],
         [1.6983, 0.6829,  0.6875,  0.4227]])
 
-    if args.model == "glow":
-        p = SourceFileLoader('cf', 'config_glow.py').load_module()
-        model = Glow(p).to(device)
-    elif args.model == "waveletflow":
-        p = SourceFileLoader('cf', 'config_waveletflow.py').load_module()
+    if args.model == "waveletflow":
+        p = SourceFileLoader('cf', 'configs/HCC_prior_config.py').load_module()
+        if p_level not in (cf.gauss_priors):
+            df = pd.read_csv('ps/yuuki_kapcib_dwtlevel'+str(2**(p_level-1))+'x'+str(2**(p_level-1))+'.dat', sep=";")
+            df.columns = df.columns.str.strip()
+            power_spec = np.array([df['ell'], df['low_auto_ch0'], df['low_auto_ch1'],
+                                    df['high_horizontal_auto_ch0'], df['high_vertical_auto_ch0'], 
+                                    df['high_diagonal_auto_ch0'], df['high_horizontal_auto_ch1'], 
+                                    df['high_vertical_auto_ch1'], df['high_diagonal_auto_ch1'],
+                                    df['low_cross_ch0_ch1'], df['high_horizontal_cross_ch0_ch1'],
+                                    df['high_vertical_cross_ch0_ch1'], df['high_diagonal_cross_ch0_ch1']])
         
+            power_spec = np.transpose(power_spec)
         #load powerspectra
         if p_level == cf.baseLevel or p_level == cf.baseLevel + 1:
-            power_spec = pd.read_csv('ps/dwtlevel_all'+str(2**cf.baseLevel)+'x'+str(2**cf.baseLevel)+'_gauss.dat', sep=";", header=None)
-            power_spec = (np.array(power_spec))[:, [0, 1, 2, 3, 4]]
             nx = int(64/(2**(6-cf.baseLevel)))
             dx = (0.5/60. * np.pi/180.)*(2**(6-cf.baseLevel))
 
             if p_level == cf.baseLevel:
-                rfourier_shape = (1, nx, int(nx/2 + 1), 2)
+                rfourier_shape = (1*cf.imShape[0], nx, int(nx/2 + 1), 2)
                 if p_level not in (cf.gauss_priors):
-                    prior = corr_prior.CorrelatedNormal_single(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,power_spec,device, freq='low')
+                    prior = corr_prior.CorrelatedNormal_dwt(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,power_spec,device, freq='low', prior_type='CC')
                 else:
-                    prior = corr_prior.CorrelatedNormal_single(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,power_spec,device, freq='low', Normal=True)
+                    shape = (cf.batch_size, 1*cf.imShape[0], nx, nx)
+                    prior = corr_prior.SimpleNormal(torch.zeros(shape).to(device), torch.ones(shape).to(device))
             else:
-                rfourier_shape = (3, nx, int(nx/2 + 1), 2)
+                rfourier_shape = (3*cf.imShape[0], nx, int(nx/2 + 1), 2)
                 if p_level not in (cf.gauss_priors):
-                    prior = corr_prior.CorrelatedNormal_dwt(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,power_spec,device, freq='high')
+                    prior = corr_prior.CorrelatedNormal_dwt(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,power_spec,device, freq='high', prior_type='CC')
                 else:
-                    prior = corr_prior.CorrelatedNormal_dwt(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,power_spec,device, freq='high', Normal=True)
+                    shape = (cf.batch_size, 3*cf.imShape[0], nx, nx)
+                    prior = corr_prior.SimpleNormal(torch.zeros(shape).to(device), torch.ones(shape).to(device))
         else:
-            power_spec = pd.read_csv('ps/dwtlevel_all'+str(2**(p_level-1))+'x'+str(2**(p_level-1))+'_gauss.dat', sep=";", header=None)
-            power_spec = (np.array(power_spec))[:, [0, 1, 2, 3, 4]]
             nx = int(64/(2**(6-p_level+1)))
             dx = (0.5/60. * np.pi/180.)*(2**(6-p_level+1))
-            rfourier_shape = (3, nx, int(nx/2 + 1), 2)
+            rfourier_shape = (3*cf.imShape[0], nx, int(nx/2 + 1), 2)
             if p_level not in (cf.gauss_priors):
-                prior = corr_prior.CorrelatedNormal_dwt(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,power_spec,device, freq='high')
+                prior = corr_prior.CorrelatedNormal_dwt(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,power_spec,device, freq='high', prior_type='CC')
             else:
-                prior = corr_prior.CorrelatedNormal_dwt(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,power_spec,device, freq='high', Normal=True)
-
+                shape = (cf.batch_size, 3*cf.imShape[0], nx, nx)
+                prior = corr_prior.SimpleNormal(torch.zeros(shape).to(device), torch.ones(shape).to(device))
         model = WaveletFlow(cf=p, cond_net=Conditioning_network(), partial_level=p_level, prior=prior, stds=stds).to(device)
         if resume:
             model.load_state_dict(torch.load(directory_path + selected_files[p_level-1]))
