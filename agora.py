@@ -1,10 +1,5 @@
-path = 'data/agora'
-augmentation = True
-affineTransform = True
-imageAug = False
-in_channels = 1
 weight_decay = 5e-5
-patch_size = [64,64]
 lr = 1e-4
-batch_size = 128
+effective_batch_size = 128
+batch_size = [128, 128, 128, 128, 128, 128, 128, 64, 16, 16]
 grayscale = False

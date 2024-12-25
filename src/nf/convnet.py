@@ -11,6 +11,7 @@ class ConvNet(nn.Module):
         block = nn.Sequential(Conv2d(in_channels, hidden_channels), nn.ReLU(inplace=False),
                               Conv2d(hidden_channels, hidden_channels, kernel_size=(1, 1)), nn.ReLU(inplace=False),
                               Conv2dZeros(hidden_channels, out_channels))
+        
         return block
 
     def __call__(self, x):

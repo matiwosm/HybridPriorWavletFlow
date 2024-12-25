@@ -30,7 +30,7 @@ class utils():
     
     def get_2d_power(self, nx, dx, r1, r2=None, num_bins=100, scale='linear'):
         if (np.any(np.isnan(r1)) or np.any(np.isinf(r1))):
-            print("whyyyyyy")
+            print("whyyyyyy", r1.shape)
             
         if (r2 is None):
             r2 = r1
@@ -42,7 +42,8 @@ class utils():
         if scale == 'linear':
              lbins = np.linspace(np.min(ell), np.max(ell), num_bins)
         elif scale == 'log':
-            lbins = np.logspace(3, np.log10(np.max(ell)), num_bins)
+            lbins = np.logspace(np.log10(np.min(ell[np.where(ell > 0)])), np.log10(np.max(ell)), num=num_bins)
+            # print(lbins, np.min(ell[np.where(ell > 0)]))
         else:
             print('scale should be linear or log')
             exit(0)
@@ -63,13 +64,13 @@ class utils():
 
         norm, bins = np.histogram(ell, bins=lbins, weights=wvec); norm[ np.where(norm != 0.0) ] = 1./norm[ np.where(norm != 0.0) ]
         clrr, bins = np.histogram(ell, bins=lbins, weights=cvec*wvec); clrr *= norm
-
+        # print('clrr', clrr)
         return bins, clrr
     
     #power spectrum with no binning
     def get_2d_power_prior(self, nx, dx, r1, r2=None, num_bins=100):
         if (np.any(np.isnan(r1)) or np.any(np.isinf(r1))):
-            print("whyyyyyy")
+            print("whyyyyyy", r1.shape)
             
         if (r2 is None):
             r2 = r1

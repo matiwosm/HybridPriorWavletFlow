@@ -5,7 +5,7 @@ import sys
 import torch
 import random
 import numpy as np
-from data_loader import ISIC
+from data_loader import yuuki_256, My_lmdb
 from importlib.machinery import SourceFileLoader
 from torch.utils.data import DataLoader
 import torch.optim as optim
@@ -21,36 +21,47 @@ from helper import utils as util
 from src.dwt.wavelets import Haar
 from src.dwt.dwt import Dwt
 
+torch.set_default_dtype(torch.float64)
+torch.set_default_tensor_type(torch.cuda.DoubleTensor)
 # Assume 'dataset' is your dataset, and 'DataLoader' is imported
 # Assume 'dwt' is your DWT transform object
 # Assume 'torch_device' is defined (e.g., 'cuda' or 'cpu')
-
-# Number of DWT levels to compute
-max_m = 5  # Adjust as needed
-
-# Dictionary to hold mean stds for each DWT level
-mean_stds_all_levels = {}
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-bdir = "/mnt/half_yuki_sim_64/"
+
+# Number of DWT levels to compute
+max_m = 5 # Adjust as needed
+
+# Dictionary to hold mean stds for each DWT level
+mean_stats_all_levels = {}
+
+#replace with your dataset
+noise_level = 0.025
+bdir = "/sdf/group/kipac/users/mati/yuuki_sim_train_64x64/"
 file = "data.mdb"
 transformer1 = None
-dataset = ISIC(bdir, file, transformer1, 1, False)
+dataset = My_lmdb(bdir, file, transformer1, 1, False, noise_level)
+
 wavelet = Haar().to(device)
 dwt = Dwt(wavelet=wavelet).to(device)
 for m in range(0, max_m):
-    loader = DataLoader(dataset, batch_size=512)
+    loader = DataLoader(dataset, batch_size=8096)
     
-    # Initialize dictionaries to hold total std deviations and counts
+    # Initialize dictionaries to hold total std deviations, mins, and maxs
     comp_total_std = {}
+    comp_min = {}  # Added to hold mins
+    comp_max = {}  # Added to hold maxs
     num_batches = 0    # Number of batches processed
     
+    # noise_level = 0.4
     # Define high-frequency component types
     high_types = ['high_horizontal', 'high_vertical', 'high_diagonal']
     n_high_types = len(high_types)
     
     for i, x in enumerate(loader):
-        x = x.to(device).to(torch.float32)
+        if (i % 10) == 0:
+            print(f"Processing batch {i}... out of {len(loader)}")
+            
         # Apply DWT m+1 times
         for k in range(m + 1):
             dwt_result = dwt.forward(x)
@@ -66,6 +77,8 @@ for m in range(0, max_m):
             comp_types = ['low'] + high_types
             for comp_type in comp_types:
                 comp_total_std[comp_type] = [0 for _ in range(N_channels)]
+                comp_min[comp_type] = [np.inf for _ in range(N_channels)]  # Added
+                comp_max[comp_type] = [-np.inf for _ in range(N_channels)]  # Added
         
         # Process 'low' components
         x1_np = x1.cpu().numpy()  # Shape: [batch_size, N_channels, H, W]
@@ -76,7 +89,13 @@ for m in range(0, max_m):
             # Compute standard deviation over the batch and spatial dimensions
             std_batch = np.std(comp_ch)
             comp_total_std['low'][ch] += std_batch
-        
+
+            # Compute min and max over the batch and spatial dimensions
+            min_batch = np.min(comp_ch)  # Added
+            max_batch = np.max(comp_ch)  # Added
+            comp_min['low'][ch] = min(comp_min['low'][ch], min_batch)  # Added
+            comp_max['low'][ch] = max(comp_max['low'][ch], max_batch)  # Added
+
         # Process high-frequency components
         x2_np = x2.cpu().numpy()  # Shape: [batch_size, N_channels * 3, H, W]
         
@@ -88,33 +107,42 @@ for m in range(0, max_m):
                 std_batch = np.std(comp_ch)
                 comp_total_std[ht][ch] += std_batch
 
+                # Compute min and max over the batch and spatial dimensions
+                min_batch = np.min(comp_ch)  # Added
+                max_batch = np.max(comp_ch)  # Added
+                comp_min[ht][ch] = min(comp_min[ht][ch], min_batch)  # Added
+                comp_max[ht][ch] = max(comp_max[ht][ch], max_batch)  # Added
+
         num_batches += 1  # Increment the number of batches
     
     # After processing all batches, compute mean standard deviations
-    comp_mean_std = {}
+    comp_stats = {}  # Modified from comp_mean_std
     for comp_type in comp_total_std.keys():
-        comp_mean_std[comp_type] = []
+        comp_stats[comp_type] = {'mean_std': [], 'min': [], 'max': []}  # Modified
         for ch in range(N_channels):
+            
             mean_std = comp_total_std[comp_type][ch] / num_batches
-            comp_mean_std[comp_type].append(mean_std)
+            print(mean_std)
+            comp_stats[comp_type]['mean_std'].append(mean_std)
+            comp_stats[comp_type]['min'].append(comp_min[comp_type][ch])  # Added
+            comp_stats[comp_type]['max'].append(comp_max[comp_type][ch])  # Added
     
-    # Save the mean stds for this DWT level
-    mean_stds_all_levels[m] = comp_mean_std
+    # Save the stats for this DWT level
+    mean_stats_all_levels[m] = comp_stats  # Modified from mean_stds_all_levels
 
-# Save mean stds to a file for later use
+# Save mean stats to a file for later use
 import json
 
-# Convert the mean stds data to a serializable format
-mean_stds_serializable = {}
-for m, comp_mean_std in mean_stds_all_levels.items():
-    mean_stds_serializable[m] = {}
-    for comp_type, std_list in comp_mean_std.items():
-        mean_stds_serializable[m][comp_type] = std_list
+# Convert the mean stats data to a serializable format
+mean_stats_serializable = {}
+for m, comp_stats in mean_stats_all_levels.items():
+    mean_stats_serializable[m] = {}
+    for comp_type, stats in comp_stats.items():
+        mean_stats_serializable[m][comp_type] = stats
 
 # Save to a JSON file
-filename = 'mean_stds_all_levels.json'
+filename = f'norm_stds/64x64_final_mean_stats_all_levels_noise_{str(noise_level)}.json'  # Modified filename
 with open(filename, 'w') as f:
-    json.dump(mean_stds_serializable, f)
+    json.dump(mean_stats_serializable, f)
 
-print(f"Mean standard deviations saved to {filename}")
-
+print(f"Mean statistics (std, min, max) saved to {filename}")

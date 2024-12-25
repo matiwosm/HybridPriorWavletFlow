@@ -6,7 +6,7 @@ import math
 import numpy as np
 import pylab as pl
 import torch
-
+import json
 import pandas as pd
 torch.manual_seed(0)
 
@@ -34,7 +34,8 @@ class CorrelatedNormal_dwt:
         #normal distribution to draw random fourier modes
         self.dist = torch.distributions.normal.Normal(torch.flatten(loc), torch.flatten(var))
         self.rfourier_shape = loc.shape
-        
+        self.level = int(np.log2(nx))
+        print('level = ', self.level)
         #create the array to multiply the fft with to get the desired power spectrum
         self.ells_flat = self.get_ell(self.nx, self.dx).flatten().astype(np.float32)
         
@@ -81,7 +82,7 @@ class CorrelatedNormal_dwt:
             h_comp3_kap_cib = zero_array
         else:
             raise ValueError("Invalid prior type")
-
+        
         if freq == 'high':
             H, W = h_comp1.shape  # Spatial dimensions
             # Initialize a 4D covariance matrix: (6 components, 6 components, H, W)
@@ -125,7 +126,6 @@ class CorrelatedNormal_dwt:
 
         
         self.det = torch.zeros((self.cov.shape[-2], self.cov.shape[-1])).to(torch_device)
-        print(self.cov.shape)
         for j in range(self.cov.shape[-2]):
             for k in range(self.cov.shape[-1]):
                 self.inv_cov[:, :, j, k] = torch.linalg.inv(self.cov[:, :, j, k])
@@ -163,7 +163,10 @@ class CorrelatedNormal_dwt:
         self.b_dist = torch.distributions.multivariate_normal.MultivariateNormal(torch.zeros(2), torch.eye(2))
         self.b_dist = self.b_dist.expand(torch.flatten(loc).shape)
         #estimate scalar fudge factor to make unit variance.
-            
+        print('estimating fudge factor')
+        s = self.sample_n(1000)
+        for i in range(s.shape[1]):
+            print('std', s.shape, torch.std(s[:, i, :, :]))
         
                        
     def get_lxly(self, nx, dx):
@@ -238,7 +241,6 @@ class CorrelatedNormal_dwt:
 
         rmap = torch.fft.irfftn(fft,dim=[-2, -1])
         #https://pytorch.org/docs/1.7.1/fft.html#torch.fft.irfftn
-        
         return rmap
     
     def _cholesky(self, array):

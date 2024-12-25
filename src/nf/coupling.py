@@ -1,3 +1,8 @@
+
+import os, sys, inspect
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+sys.path.insert(0, parentdir) 
 import torch
 import torch.nn as nn
 from utilities import split_feature
@@ -231,7 +236,7 @@ class MyCheckerboard(nn.Module):
         else:
             h = self.block(x_frozen)
         s, t = split_feature(h, "cross")
-        # s = torch.sigmoid(s + 2.0)
+        s = torch.sigmoid(s + 2.0)
         fx = (1 - self.mask) * t + x_active * torch.exp(s) + x_frozen
         axes = range(1,len(s.size()))
         logJ = torch.sum((1 - self.mask) * s, dim=tuple(axes))
@@ -250,7 +255,7 @@ class MyCheckerboard(nn.Module):
             h = self.block(fx_frozen)
         s, t = split_feature(h, "cross")
         # print(s, t)
-        # s = torch.sigmoid(s + 2.0)
+        s = torch.sigmoid(s + 2.0)
         x = (fx_active - (1 - self.mask) * t) * torch.exp(-s) + fx_frozen
         axes = range(1,len(s.size()))
         logJ = torch.sum((1 - self.mask)*(-s), dim=tuple(axes))

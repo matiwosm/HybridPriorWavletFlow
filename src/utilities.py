@@ -4,6 +4,87 @@ import random
 import torch.nn.functional as F
 import math
 
+def unnormalize_dwt_components(data, mean_stds, freq_type):
+    """
+    Un-normalizes the DWT components using the mean standard deviations.
+    
+    Args:
+        data (torch.Tensor): The normalized data to be un-normalized.
+            For 'low' frequency, shape should be (batch_size, N_channels, H, W).
+            For 'high' frequency, shape should be (batch_size, N_channels * 3, H, W).
+        mean_stds (dict): The mean standard deviations for each component type and channel.
+            Should be mean_stds_all_levels[str(m)], where m is the DWT level.
+        freq_type (str): 'high' or 'low', indicating which frequency components to un-normalize.
+    
+    Returns:
+        unnormalized_data (torch.Tensor): The un-normalized data.
+    """
+    import torch
+
+    if freq_type == 'low':
+        # Low-frequency components
+        N_channels = data.shape[1]
+        unnormalized_data = torch.empty_like(data)
+        for ch in range(N_channels):
+            std = mean_stds['low']['mean_std'][ch]
+            unnormalized_data[:, ch, :, :] = data[:, ch, :, :] * std
+    elif freq_type == 'high':
+        # High-frequency components
+        N_channels = data.shape[1] // 3
+        n_high_types = 3  # ['high_horizontal', 'high_vertical', 'high_diagonal']
+        unnormalized_data = torch.empty_like(data)
+        high_types = ['high_horizontal', 'high_vertical', 'high_diagonal']
+        for ch in range(N_channels):
+            for ht_idx, ht in enumerate(high_types):
+                idx = ch * n_high_types + ht_idx
+                std = mean_stds[ht]['mean_std'][ch]
+                unnormalized_data[:, idx, :, :] = data[:, idx, :, :] * std
+    else:
+        raise ValueError("freq_type must be 'high' or 'low'")
+
+    return unnormalized_data
+
+
+def normalize_dwt_components(data, mean_stds, freq_type):
+    """
+    Normalizes the DWT components using the mean standard deviations.
+
+    Args:
+        data (torch.Tensor): The data to be normalized.
+            For 'low' frequency, shape should be (batch_size, N_channels, H, W).
+            For 'high' frequency, shape should be (batch_size, N_channels * 3, H, W).
+        mean_stds (dict): The mean standard deviations for each component type and channel.
+            Should be mean_stds_all_levels[str(m)], where m is the DWT level.
+        freq_type (str): 'high' or 'low', indicating which frequency components to normalize.
+
+    Returns:
+        normalized_data (torch.Tensor): The normalized data.
+    """
+    if freq_type == 'low':
+        # Low-frequency components
+        N_channels = data.shape[1]
+        normalized_data = torch.empty_like(data)
+        for ch in range(N_channels):
+            std = mean_stds['low']['mean_std'][ch]
+            normalized_data[:, ch, :, :] = data[:, ch, :, :] / std
+
+    elif freq_type == 'high':
+        # High-frequency components
+        N_channels = data.shape[1] // 3
+        n_high_types = 3  # ['high_horizontal', 'high_vertical', 'high_diagonal']
+        normalized_data = torch.empty_like(data)
+        high_types = ['high_horizontal', 'high_vertical', 'high_diagonal']
+        for ch in range(N_channels):
+            for ht_idx, ht in enumerate(high_types):
+                idx = ch * n_high_types + ht_idx
+                std = mean_stds[ht]['mean_std'][ch]
+                normalized_data[:, idx, :, :] = data[:, idx, :, :] / std
+    else:
+        raise ValueError("freq_type must be 'high' or 'low'")
+    # print('normalize_dwt_components', std, data.shape, freq_type, mean_stds)
+    return normalized_data
+
+
 def compute_same_pad(kernel_size, stride):
     if isinstance(kernel_size, int):
         kernel_size = [kernel_size]

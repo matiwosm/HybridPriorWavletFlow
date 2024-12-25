@@ -5,7 +5,7 @@ import sys
 import torch
 import random
 import numpy as np
-from data_loader import ISIC
+from data_loader import My_lmdb, yuuki_256
 from importlib.machinery import SourceFileLoader
 from torch.utils.data import DataLoader
 import torch.optim as optim
@@ -75,10 +75,18 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 wavelet = Haar().to(device)
 dwt = Dwt(wavelet=wavelet).to(device)
-bdir = "/mnt/half_yuki_sim_64/"
+
+#replace with your dataset
+noise_level = 0.025
+bdir = "/sdf/group/kipac/users/mati/yuuki_sim_train_64x64/"
 file = "data.mdb"
 transformer1 = None
-dataset = ISIC(bdir, file, transformer1, 1, False)
+dataset = My_lmdb(bdir, file, transformer1, 1, False, noise_level)
+
+
+# Number of DWT levels to compute
+max_m = 5 # Adjust as needed
+
 # including the 'low' components and high-frequency components.
 for m in range(0, 5):
     loader = DataLoader(dataset, batch_size=8096)
@@ -186,6 +194,7 @@ for m in range(0, 5):
         # Auto spectra
         comp_mean_spectra[comp_type] = []
         for ch in range(N_channels):
+            print(comp_type, comp_mean_std[comp_type][ch])
             # Normalize by total samples and squared mean standard deviation
             mean_spectrum = comp_auto_spectra_sum[comp_type][ch] / total_samples
             mean_std = comp_mean_std[comp_type][ch]
@@ -201,7 +210,7 @@ for m in range(0, 5):
             comp_cross_mean_spectra[comp_type].append((i_ch, j_ch, mean_cross_spectrum))
 
     # Save results to a file
-    filename = f'gaussian_kapcib_dwtlevel{nx}x{nx}.dat'
+    filename = f'ps/noised_kappa_yuuki_{dataset[0].shape[0]}comps_dwtlevel{nx}x{nx}.dat'
     with open(filename, 'w') as file:
         print('SAVING')
         # Write column headers

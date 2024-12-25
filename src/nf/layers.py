@@ -17,7 +17,7 @@ def gaussian_p(mean, logs, x):
     return -0.5 * (logs * 2.0 + ((x - mean) ** 2) / torch.exp(logs * 2.0) + c)
 
 
-def gaussian_likelihood(mean, logs, x):
+def likelihood(mean, logs, x):
     p = gaussian_p(mean, logs, x)
     return torch.sum(p, dim=[1, 2, 3])
 
