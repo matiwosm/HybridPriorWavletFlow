@@ -80,12 +80,13 @@ def main():
     bdir = cf.dataset_path
     file = "data.mdb"
     transformer1 = None
+    noise_level = 0.025
     if cf.dataset == 'My_lmdb':
         print('loading yuuki sims proper')
-        dataset = My_lmdb(bdir, file, transformer1, 1, False)
+        dataset = My_lmdb(bdir, file, transformer1, 1, False, noise_level)
     elif cf.dataset == 'yuuki_256':
         print('loading yuuki 256')
-        dataset = yuuki_256(bdir, file, transformer1, 1, False)
+        dataset = yuuki_256(bdir, file, transformer1, 1, False, noise_level)
 
 
 

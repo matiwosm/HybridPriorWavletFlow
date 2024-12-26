@@ -1,0 +1,26 @@
+/sdf/home/m/mati/HybridPriorWavletFlow_works_well
+CUDA_VISIBLE_DEVICES set to: 0
+Training level: 3
+Visible devices: 1
+Device 0: NVIDIA A100-SXM4-40GB
+Using CUDA device index: 0
+saving models to  /sdf/group/kipac/users/mati/best_model_64_noised_kappa/
+loading yuuki sims proper
+batch size  128  acc  1 6250
+loading stds  norm_stds/64x64_final_mean_stats_all_levels_noise_0.025.json
+4 {'low': {'mean_std': [7.239703295002483, 2.1087875404874277], 'min': [-34.41436882222145, -10.09303141755179], 'max': [40.40215540576316, 19.252075155544958]}, 'high_horizontal': {'mean_std': [3.425096938707147, 1.3434651726494216], 'min': [-22.837005894213966, -8.232666673350476], 'max': [23.3507893480464, 9.800012187500307]}, 'high_vertical': {'mean_std': [3.4324551410656725, 1.3429351946607366], 'min': [-23.074559326531062, -10.447462937063948], 'max': [25.71319587061422, 9.023499498277499]}, 'high_diagonal': {'mean_std': [2.4621221815221177, 1.1742455123778643], 'min': [-17.24125244070951, -7.960453265680892], 'max': [14.580841859835054, 6.456767782153423]}}
+using checker
+using checker
+using checker
+using checker
+In Glow  WN <corr_prior.SimpleNormal object at 0x7f7d8fd504f0>
+Prior type =  WN
+Total number of parameters: 451016
+Epoch: 1 Level: 3  Progress:      0.0% Likelihood:      nan Patience:      0   Time:  0.10444974899291992
+Epoch: 1 Level: 3  Progress:      1.6% Likelihood:      5.9427101194158345 Patience:      0   Time:  15.028594493865967
+Epoch: 1 Level: 3  Progress:      3.2% Likelihood:      5.916101926894623 Patience:      0   Time:  29.54468059539795
+Epoch: 1 Level: 3  Progress:      4.8% Likelihood:      5.899619176053794 Patience:      0   Time:  43.95816659927368
+Epoch: 1 Level: 3  Progress:      6.4% Likelihood:      5.888192880345937 Patience:      0   Time:  58.41200804710388
+Epoch: 1 Level: 3  Progress:      8.0% Likelihood:      5.881216367773692 Patience:      0   Time:  72.92138051986694
+Epoch: 1 Level: 3  Progress:      9.6% Likelihood:      5.876069168998679 Patience:      0   Time:  87.42481017112732
+Epoch: 1 Level: 3  Progress:      11.2% Likelihood:      5.87268917373307 Patience:      0   Time:  101.97059988975525

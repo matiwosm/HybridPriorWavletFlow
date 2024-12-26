@@ -4,7 +4,7 @@ import re
 import torch
 import random
 import numpy as np
-from data_loader import ISIC, My_lmdb, yuuki_256
+from data_loader import My_lmdb, yuuki_256
 from importlib.machinery import SourceFileLoader
 from torch.utils.data import DataLoader
 import torch.optim as optim
@@ -768,12 +768,13 @@ def main():
     bdir = cf.val_dataset_path
     file = "data.mdb"
     transformer1 = None
+    noise_level = 0.0
     if cf.dataset == 'My_lmdb':
         print('loading yuuki sims proper')
-        dataset = My_lmdb(bdir, file, transformer1, 1, False)
+        dataset = My_lmdb(bdir, file, transformer1, 1, False, noise_level)
     elif cf.dataset == 'yuuki_256':
         print('loading yuuki 256')
-        dataset = yuuki_256(bdir, file, transformer1, 1, False)
+        dataset = yuuki_256(bdir, file, transformer1, 1, False, noise_level)
 
     loader = DataLoader(dataset, batch_size=64, shuffle=True, pin_memory=True)
     iter_loader = iter(loader)
@@ -782,6 +783,8 @@ def main():
 
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total number of parameters: {total_params}")
+
+    #calculate and plot power spectra and minkowski functionals
     start = time.time()
     compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, nLevels=cf.nLevels, get_train_modes=False, cond_on_target=False, max_iterations=20)
     compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, nLevels=cf.nLevels, get_train_modes=True, cond_on_target=False, max_iterations=20)
@@ -804,8 +807,8 @@ def main():
 
 if __name__  == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, default="configs/HCC_prior_best_model_256x256_all_levels.py", help='specify config')
-    parser.add_argument('--hlevel', type=int, default=8, help='highest level wavelet to sample')
+    parser.add_argument('--config', type=str, default="configs/example_config_hcc_prior.py", help='specify config')
+    parser.add_argument('--hlevel', type=int, default=6, help='highest level wavelet to sample')
     parser.add_argument('--data', type=str, default="agora", help='input data')
     parser.add_argument('--savesamples', type=str, default=False, help='save samples')
     parser.add_argument('--plotstats', type=str, default=True, help='plot stats')

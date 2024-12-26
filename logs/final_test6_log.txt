@@ -1,0 +1,40 @@
+/sdf/home/m/mati/HybridPriorWavletFlow_works_well
+CUDA_VISIBLE_DEVICES set to: 0
+Training level: 6
+Visible devices: 1
+Device 0: NVIDIA L40S
+Using CUDA device index: 0
+saving models to  /sdf/group/kipac/users/mati/best_model_64_noised_kappa/
+loading yuuki sims proper
+batch size  128  acc  1 6250
+loading stds  norm_stds/64x64_final_mean_stats_all_levels_noise_0.025.json
+1 {'low': {'mean_std': [1.656314188069083, 1.0437990646975872], 'min': [-8.314464315334172, -3.638128883782748], 'max': [27.899015209473365, 13.61983732494105]}, 'high_horizontal': {'mean_std': [0.6817151526533516, 0.9556451725879399], 'min': [-10.754872504473246, -9.5286540495275], 'max': [11.30822068465952, 9.236609958681823]}, 'high_vertical': {'mean_std': [0.6860693250283433, 0.9675447612322545], 'min': [-12.03124413904121, -9.433582874950815], 'max': [12.403249617494918, 9.265608530571022]}, 'high_diagonal': {'mean_std': [0.45887773789660835, 0.95307193833576], 'min': [-5.301498648807473, -8.688106045290565], 'max': [5.736186421005232, 9.359970470499134]}}
+loading ps  ps/noised_kappa_yuuki_2comps_dwtlevel32x32.dat
+level =  5
+estimating fudge factor
+std torch.Size([1000, 6, 32, 32]) tensor(0.9989, device='cuda:0', dtype=torch.float32)
+std torch.Size([1000, 6, 32, 32]) tensor(1.0016, device='cuda:0', dtype=torch.float32)
+std torch.Size([1000, 6, 32, 32]) tensor(1.0001, device='cuda:0', dtype=torch.float32)
+std torch.Size([1000, 6, 32, 32]) tensor(0.9990, device='cuda:0', dtype=torch.float32)
+std torch.Size([1000, 6, 32, 32]) tensor(1.0010, device='cuda:0', dtype=torch.float32)
+std torch.Size([1000, 6, 32, 32]) tensor(0.9994, device='cuda:0', dtype=torch.float32)
+using checker
+using checker
+using checker
+using checker
+using checker
+using checker
+using checker
+using checker
+using checker
+using checker
+using checker
+using checker
+using checker
+using checker
+using checker
+using checker
+In Glow  CC <corr_prior.CorrelatedNormal_dwt object at 0x7f29e3034b80>
+Prior type =  CC
+Total number of parameters: 1804064
+Epoch: 1 Level: 6  Progress:      0.0% Likelihood:      nan Patience:      0   Time:  0.07896304130554199

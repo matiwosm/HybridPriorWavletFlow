@@ -1,0 +1,27 @@
+/sdf/home/m/mati/HybridPriorWavletFlow_works_well
+CUDA_VISIBLE_DEVICES set to: 0
+Training level: 2
+Visible devices: 1
+Device 0: NVIDIA A100-SXM4-40GB
+Using CUDA device index: 0
+saving models to  /sdf/group/kipac/users/mati/best_model_64_noised_kappa/
+loading yuuki sims proper
+batch size  128  acc  1 6250
+loading stds  norm_stds/64x64_final_mean_stats_all_levels_noise_0.025.json
+5 {'low': {'mean_std': [11.051942916211898, 2.9802173940364067], 'min': [-51.91442297346693, -14.006052520152641], 'max': [55.295184818171165, 14.416682085250336]}, 'high_horizontal': {'mean_std': [5.869134518295521, 1.8245656045171035], 'min': [-31.088301152385533, -8.76788864390923], 'max': [28.766456959076997, 9.41776202817942]}, 'high_vertical': {'mean_std': [5.8909870218479545, 1.8242279469546774], 'min': [-30.491951880230115, -10.06847601908627], 'max': [32.72194078416296, 9.498035257168784]}, 'high_diagonal': {'mean_std': [4.2834538416912995, 1.4995884877451722], 'min': [-23.49128271502719, -7.674723776687665], 'max': [21.17680228968929, 9.546893390582811]}}
+using checker
+using checker
+In Glow  WN <corr_prior.SimpleNormal object at 0x7f41535504f0>
+Prior type =  WN
+Total number of parameters: 225508
+Epoch: 1 Level: 2  Progress:      0.0% Likelihood:      nan Patience:      0   Time:  0.0968024730682373
+Epoch: 1 Level: 2  Progress:      1.6% Likelihood:      7.581418007102445 Patience:      0   Time:  10.84797477722168
+Epoch: 1 Level: 2  Progress:      3.2% Likelihood:      7.547457525036059 Patience:      0   Time:  21.258379220962524
+Epoch: 1 Level: 2  Progress:      4.8% Likelihood:      7.524200223708643 Patience:      0   Time:  31.705013036727905
+Epoch: 1 Level: 2  Progress:      6.4% Likelihood:      7.505224707621828 Patience:      0   Time:  42.03903675079346
+Epoch: 1 Level: 2  Progress:      8.0% Likelihood:      7.4905765034660545 Patience:      0   Time:  52.435972452163696
+Epoch: 1 Level: 2  Progress:      9.6% Likelihood:      7.478490117328686 Patience:      0   Time:  62.80110287666321
+Epoch: 1 Level: 2  Progress:      11.2% Likelihood:      7.469259071863094 Patience:      0   Time:  73.18992614746094
+Epoch: 1 Level: 2  Progress:      12.8% Likelihood:      7.461021942145423 Patience:      0   Time:  83.54145622253418
+Epoch: 1 Level: 2  Progress:      14.4% Likelihood:      7.4542158408695895 Patience:      0   Time:  93.95852875709534
+Epoch: 1 Level: 2  Progress:      16.0% Likelihood:      7.448348352848845 Patience:      0   Time:  104.31594896316528

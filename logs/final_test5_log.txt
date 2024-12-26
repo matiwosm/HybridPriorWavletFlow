@@ -1,0 +1,33 @@
+/sdf/home/m/mati/HybridPriorWavletFlow_works_well
+CUDA_VISIBLE_DEVICES set to: 0
+Training level: 5
+Visible devices: 1
+Device 0: NVIDIA L40S
+Using CUDA device index: 0
+saving models to  /sdf/group/kipac/users/mati/best_model_64_noised_kappa/
+loading yuuki sims proper
+batch size  128  acc  1 6250
+loading stds  norm_stds/64x64_final_mean_stats_all_levels_noise_0.025.json
+2 {'low': {'mean_std': [2.756995667796071, 1.2072103673127272], 'min': [-13.563323040400418, -5.360631567281251], 'max': [33.88981337451356, 14.452109050565284]}, 'high_horizontal': {'mean_std': [1.15370877549458, 0.9925876872251423], 'min': [-15.774423726657847, -10.410435653348157], 'max': [14.294003550366865, 9.130118708667192]}, 'high_vertical': {'mean_std': [1.1569662216535477, 0.991500599803512], 'min': [-13.575686101154801, -9.256973413974912], 'max': [14.552026184002449, 8.685051258407388]}, 'high_diagonal': {'mean_std': [0.8383267289013507, 0.9655540697999918], 'min': [-10.02599816318961, -7.554319956637224], 'max': [10.474894936804803, 8.41593194712434]}}
+using checker
+using checker
+using checker
+using checker
+using checker
+using checker
+using checker
+using checker
+using checker
+using checker
+using checker
+using checker
+using checker
+using checker
+using checker
+using checker
+In Glow  WN <corr_prior.SimpleNormal object at 0x7f63df148520>
+Prior type =  WN
+Total number of parameters: 1804064
+Epoch: 1 Level: 5  Progress:      0.0% Likelihood:      nan Patience:      0   Time:  0.06010007858276367
+Epoch: 1 Level: 5  Progress:      1.6% Likelihood:      2.942515282705764 Patience:      0   Time:  62.70146417617798
+Epoch: 1 Level: 5  Progress:      3.2% Likelihood:      2.9323159876979927 Patience:      0   Time:  124.90829920768738
