@@ -43,3 +43,4 @@ Epoch: 1 Level: 5  Progress:      17.6% Likelihood:      2.9227771823941895 Pati
 Epoch: 1 Level: 5  Progress:      19.2% Likelihood:      2.9221479718719534 Patience:      0   Time:  748.1209700107574
 Epoch: 1 Level: 5  Progress:      20.8% Likelihood:      2.9215531546750046 Patience:      0   Time:  810.4580760002136
 Epoch: 1 Level: 5  Progress:      22.4% Likelihood:      2.921068138007325 Patience:      0   Time:  872.8868668079376
+Epoch: 1 Level: 5  Progress:      24.0% Likelihood:      2.9205633346446818 Patience:      0   Time:  935.2551083564758

@@ -168,7 +168,6 @@ def main():
 
         for idx, x in enumerate(loader):
             if ((idx) % 100) == 0:
-                torch.save(model.state_dict(), f'{directory_path}/waveletflow-{args.data}-{args.level}-{ep}-test.pt')
                 torch.cuda.synchronize()
                 elapsed_time = time.time() - start_time
                 print(f"Epoch: {ep} Level: {p_level}  Progress:      {round((idx * 100) / (len(loader)), 4)}% Likelihood:      {np.mean(ep_loss)} Patience:      {round(patience, 5)}   Time:  {elapsed_time}" , end="\n")
