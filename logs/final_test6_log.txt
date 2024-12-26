@@ -38,3 +38,7 @@ In Glow  CC <corr_prior.CorrelatedNormal_dwt object at 0x7f29e3034b80>
 Prior type =  CC
 Total number of parameters: 1804064
 Epoch: 1 Level: 6  Progress:      0.0% Likelihood:      nan Patience:      0   Time:  0.07896304130554199
+Epoch: 1 Level: 6  Progress:      1.6% Likelihood:      0.27184975100238445 Patience:      0   Time:  193.02980637550354
+Epoch: 1 Level: 6  Progress:      3.2% Likelihood:      0.24659226512186597 Patience:      0   Time:  385.23187947273254
+Epoch: 1 Level: 6  Progress:      4.8% Likelihood:      0.23422428765373865 Patience:      0   Time:  577.5597002506256
+Epoch: 1 Level: 6  Progress:      6.4% Likelihood:      0.2264506169475026 Patience:      0   Time:  769.896719455719

@@ -31,3 +31,15 @@ Total number of parameters: 1804064
 Epoch: 1 Level: 5  Progress:      0.0% Likelihood:      nan Patience:      0   Time:  0.06010007858276367
 Epoch: 1 Level: 5  Progress:      1.6% Likelihood:      2.942515282705764 Patience:      0   Time:  62.70146417617798
 Epoch: 1 Level: 5  Progress:      3.2% Likelihood:      2.9323159876979927 Patience:      0   Time:  124.90829920768738
+Epoch: 1 Level: 5  Progress:      4.8% Likelihood:      2.928116539771157 Patience:      0   Time:  187.21721649169922
+Epoch: 1 Level: 5  Progress:      6.4% Likelihood:      2.9256457195451855 Patience:      0   Time:  249.42511439323425
+Epoch: 1 Level: 5  Progress:      8.0% Likelihood:      2.924253980578961 Patience:      0   Time:  311.74220967292786
+Epoch: 1 Level: 5  Progress:      9.6% Likelihood:      2.9243026070806817 Patience:      0   Time:  374.04946279525757
+Epoch: 1 Level: 5  Progress:      11.2% Likelihood:      2.9243538340871837 Patience:      0   Time:  436.31925797462463
+Epoch: 1 Level: 5  Progress:      12.8% Likelihood:      2.9241866985584135 Patience:      0   Time:  498.62456822395325
+Epoch: 1 Level: 5  Progress:      14.4% Likelihood:      2.9238898640711866 Patience:      0   Time:  560.8755633831024
+Epoch: 1 Level: 5  Progress:      16.0% Likelihood:      2.9235155076590824 Patience:      0   Time:  623.3129241466522
+Epoch: 1 Level: 5  Progress:      17.6% Likelihood:      2.9227771823941895 Patience:      0   Time:  685.6795518398285
+Epoch: 1 Level: 5  Progress:      19.2% Likelihood:      2.9221479718719534 Patience:      0   Time:  748.1209700107574
+Epoch: 1 Level: 5  Progress:      20.8% Likelihood:      2.9215531546750046 Patience:      0   Time:  810.4580760002136
+Epoch: 1 Level: 5  Progress:      22.4% Likelihood:      2.921068138007325 Patience:      0   Time:  872.8868668079376

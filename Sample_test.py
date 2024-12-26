@@ -768,7 +768,7 @@ def main():
     bdir = cf.val_dataset_path
     file = "data.mdb"
     transformer1 = None
-    noise_level = 0.0
+    noise_level = 0.025
     if cf.dataset == 'My_lmdb':
         print('loading yuuki sims proper')
         dataset = My_lmdb(bdir, file, transformer1, 1, False, noise_level)
