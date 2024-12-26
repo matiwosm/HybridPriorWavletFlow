@@ -120,3 +120,11 @@ Epoch: 2 Level: 5  Progress:      36.8% Likelihood:      2.91026144581362 Patien
 Epoch: 2 Level: 5  Progress:      38.4% Likelihood:      2.910254023033963 Patience:      0   Time:  5416.81339097023
 Epoch: 2 Level: 5  Progress:      40.0% Likelihood:      2.9102083748576426 Patience:      0   Time:  5478.700819015503
 Epoch: 2 Level: 5  Progress:      41.6% Likelihood:      2.9101544981983047 Patience:      0   Time:  5540.719402551651
+Epoch: 2 Level: 5  Progress:      43.2% Likelihood:      2.9101137905085586 Patience:      0   Time:  5602.667770624161
+Epoch: 2 Level: 5  Progress:      44.8% Likelihood:      2.9100519412529424 Patience:      0   Time:  5664.734978437424
+Epoch: 2 Level: 5  Progress:      46.4% Likelihood:      2.910006182707057 Patience:      0   Time:  5726.836143732071
+Epoch: 2 Level: 5  Progress:      48.0% Likelihood:      2.9099766494035113 Patience:      0   Time:  5789.036809206009
+Epoch: 2 Level: 5  Progress:      49.6% Likelihood:      2.9099536578912835 Patience:      0   Time:  5851.18901515007
+Epoch: 2 Level: 5  Progress:      51.2% Likelihood:      2.909899813986592 Patience:      0   Time:  5913.194553375244
+Epoch: 2 Level: 5  Progress:      52.8% Likelihood:      2.9098504295778747 Patience:      0   Time:  5975.36887717247
+Epoch: 2 Level: 5  Progress:      54.4% Likelihood:      2.909813043636436 Patience:      0   Time:  6037.3144743442535
