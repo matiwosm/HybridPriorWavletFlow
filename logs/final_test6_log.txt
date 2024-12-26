@@ -42,3 +42,9 @@ Epoch: 1 Level: 6  Progress:      1.6% Likelihood:      0.27184975100238445 Pati
 Epoch: 1 Level: 6  Progress:      3.2% Likelihood:      0.24659226512186597 Patience:      0   Time:  385.23187947273254
 Epoch: 1 Level: 6  Progress:      4.8% Likelihood:      0.23422428765373865 Patience:      0   Time:  577.5597002506256
 Epoch: 1 Level: 6  Progress:      6.4% Likelihood:      0.2264506169475026 Patience:      0   Time:  769.896719455719
+Epoch: 1 Level: 6  Progress:      8.0% Likelihood:      0.2210093072770488 Patience:      0   Time:  962.2159686088562
+Epoch: 1 Level: 6  Progress:      9.6% Likelihood:      0.21884197042418624 Patience:      0   Time:  1154.4826972484589
+Epoch: 1 Level: 6  Progress:      11.2% Likelihood:      0.21677914388869957 Patience:      0   Time:  1346.795402288437
+Epoch: 1 Level: 6  Progress:      12.8% Likelihood:      0.21506031136499565 Patience:      0   Time:  1539.1309938430786
+Epoch: 1 Level: 6  Progress:      14.4% Likelihood:      0.21351354262439268 Patience:      0   Time:  1731.478253364563
+Epoch: 1 Level: 6  Progress:      16.0% Likelihood:      0.21203507654871817 Patience:      0   Time:  1923.8197751045227

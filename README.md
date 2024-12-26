@@ -25,19 +25,19 @@ This project includes several key scripts for handling Discrete Wavelet Transfor
 
 2. **Normalization**
 
-   Run `calc_normalization.py` to compute normalization constants for the DWT-transformed training data. The normalization constants will be saved as `.npz` files in the `norm` folder.
+   Run `calc_normalization.py` to compute normalization constants for the DWT-transformed training data. The normalization constants will be saved as `.jason` files in the `norm_stds` folder. It also calculates the golbal min and max of the data.
 
 3. **Model Training**
 
    Train the WaveletFlow model by running `train.py`. You can train each DWT level independently using the following command:
 
-`python train.py --level n`
+`python train.py --level n --config configs/example_config_hcc_prior.py`
 
-where `n` specifies the DWT level to train.
+where `n` specifies the DWT level to train and `configs/example_config_hcc_prior.py` is a config file. See `configs/example_config_hcc_prior.py` for example.
 
 4. **Sampling**
 
-Use `sample.py` for sampling from the trained model. The `--hlevel` argument allows you to specify the highest DWT level to include in the sampling process. For a full map, set `hlevel` to the highest training level.
+Use `Sample_test.py` for sampling from the trained model. The `--hlevel` argument allows you to specify the highest DWT level to include in the sampling process. The `--config` is used to specify the config file. Training and sampling should be done using the same configuration. For a full map, set `hlevel` to the highest training level.
 
 ### Contributions
 
