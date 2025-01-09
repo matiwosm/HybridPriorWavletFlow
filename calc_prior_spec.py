@@ -72,17 +72,29 @@ def compute_and_accumulate_spectra(comp_a, comp_b, nx, dx):
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+config_file = 'configs/example_config_hcc_prior.py'
+cf = SourceFileLoader('cf', config_file).load_module()
+
 
 wavelet = Haar().to(device)
 dwt = Dwt(wavelet=wavelet).to(device)
 
 #replace with your dataset
-noise_level = 0.025
-bdir = "/sdf/group/kipac/users/mati/yuuki_sim_train_64x64/"
+bdir = cf.dataset_path
 file = "data.mdb"
-transformer1 = None
-dataset = My_lmdb(bdir, file, transformer1, 1, False, noise_level)
 
+# Create the dataset
+dataset = My_lmdb(
+    db_path=bdir,
+    file_path=file,
+    transformer=None,
+    num_classes=1,
+    class_cond=False,
+    channels_to_use=cf.channels_to_get,
+    noise_dict=cf.noise_dict,        # noise only these channels
+    apply_scaling=True,           # do the scaling
+    data_shape=cf.data_shape       
+)
 
 # Number of DWT levels to compute
 max_m = 5 # Adjust as needed
@@ -118,7 +130,7 @@ for m in range(0, 5):
         nx = x1.shape[-1]
         dx = (0.5 / 60. * np.pi / 180.) * 2 ** (m + 1)
         ell, bin_spectrum = get_2d_power(nx, dx, x1.cpu().numpy(), x1.cpu().numpy())
-        print(m, x1.shape, x2.shape)
+        print(m, i, x1.shape, x2.shape)
 
         N_channels = x1.shape[1]  # Number of input channels
 
@@ -210,7 +222,7 @@ for m in range(0, 5):
             comp_cross_mean_spectra[comp_type].append((i_ch, j_ch, mean_cross_spectrum))
 
     # Save results to a file
-    filename = f'ps/noised_kappa_yuuki_{dataset[0].shape[0]}comps_dwtlevel{nx}x{nx}.dat'
+    filename = f'ps/64x64_kappa_noise_{0.025}_yuuki_{dataset[0].shape[0]}comps_dwtlevel{nx}x{nx}.dat'
     with open(filename, 'w') as file:
         print('SAVING')
         # Write column headers

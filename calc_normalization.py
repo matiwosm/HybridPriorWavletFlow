@@ -28,6 +28,8 @@ torch.set_default_tensor_type(torch.cuda.DoubleTensor)
 # Assume 'torch_device' is defined (e.g., 'cuda' or 'cpu')
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+config_file = 'configs/example_config_hcc_prior_tsz.py'
+cf = SourceFileLoader('cf', config_file).load_module()
 
 # Number of DWT levels to compute
 max_m = 5 # Adjust as needed
@@ -36,11 +38,21 @@ max_m = 5 # Adjust as needed
 mean_stats_all_levels = {}
 
 #replace with your dataset
-noise_level = 0.025
-bdir = "/sdf/group/kipac/users/mati/yuuki_sim_train_64x64/"
+bdir = cf.dataset_path
 file = "data.mdb"
-transformer1 = None
-dataset = My_lmdb(bdir, file, transformer1, 1, False, noise_level)
+
+# Create the dataset
+dataset = My_lmdb(
+    db_path=bdir,
+    file_path=file,
+    transformer=None,
+    num_classes=1,
+    class_cond=False,
+    channels_to_use=cf.channels_to_get,
+    noise_dict=cf.noise_dict,        # noise only these channels
+    apply_scaling=True,           # do the scaling
+    data_shape=cf.data_shape       
+)
 
 wavelet = Haar().to(device)
 dwt = Dwt(wavelet=wavelet).to(device)
@@ -141,7 +153,7 @@ for m, comp_stats in mean_stats_all_levels.items():
         mean_stats_serializable[m][comp_type] = stats
 
 # Save to a JSON file
-filename = f'norm_stds/64x64_final_mean_stats_all_levels_noise_{str(noise_level)}.json'  # Modified filename
+filename = f'norm_stds/64x64_final_mean_stats_all_levels_tsz.json'  # Modified filename
 with open(filename, 'w') as f:
     json.dump(mean_stats_serializable, f)
 

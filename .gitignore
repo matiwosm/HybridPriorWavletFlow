@@ -3,3 +3,6 @@
 logs/
 plots_64_noised_kappa/
 plots_mf/
+plots*
+configs/__pycache__
+

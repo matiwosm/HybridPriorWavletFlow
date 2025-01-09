@@ -222,7 +222,7 @@ class WaveletFlow(nn.Module):
                 x = self.dwt.inverse({'low': base, 'high': x_unnorm})
 
                 # If conditioning on target at lower levels:
-                if cond_on_target and level < 4:
+                if cond_on_target:
                     # Use the target's data instead of the reconstructed base if desired
                     x = data[level - self.base_level]
                 # print('flow not none', x.shape)

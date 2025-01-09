@@ -8,110 +8,253 @@ import numpy as np
 import lmdb
 import os
 
+import os
+import lmdb
+import numpy as np
+from torch.utils.data import Dataset
+
 class My_lmdb(Dataset):    
-    def __init__(self, db_path, file_path, transformer, num_classes, class_cond, noise_level=0.0):
+    # Channel name -> index mapping
+    CHANNEL_MAP = {
+        'kappa': 0,
+        'ksz'  : 1,
+        'tsz'  : 2,
+        'cib'  : 3,
+        'rad'  : 4
+    }
+
+    def __init__(
+        self, 
+        db_path, 
+        file_path, 
+        transformer, 
+        num_classes, 
+        class_cond,
+        # New parameters
+        channels_to_use=None,       # list of strings, e.g. ['kappa','tsz']
+        noise_dict=None,            # dict of {channel_name: noise_std}, e.g. {'kappa':0.025, 'tsz':0.05}
+        apply_scaling=True,         # boolean - whether to scale the data
+        data_shape=(5, 64, 64)      # specify the shape to reshape the array from LMDB
+    ):
+        """
+        :param db_path: Path to the LMDB folder
+        :param file_path: Not used here, but kept for compatibility
+        :param transformer: Some transformer (if you have one)
+        :param num_classes: Number of classes (if relevant for your usage)
+        :param class_cond: Some class conditioning (bool)
+        :param channels_to_use: list of channel names (strings). Only these channels will be returned.
+        :param noise_dict: dictionary specifying noise levels per channel, e.g. {'kappa': 0.025, 'tsz': 0.1}.
+        :param apply_scaling: whether to apply the scaling logic (True/False)
+        :param data_shape: tuple specifying how to reshape the data read from LMDB
+        """
+        super().__init__()
         self.db_path = db_path
         self.file_path = file_path
         self.transformer = transformer
-        # Delay loading LMDB data until after initialization to avoid "can't pickle Environment Object error"
-        self.env = lmdb.open(self.db_path, subdir=os.path.isdir(self.db_path),
-            readonly=True, lock=False)
-        self.length = self.env.stat()['entries']
         self.num_classes = num_classes
         self.class_cond = class_cond
-        self.noise_level = noise_level
+        
+        # Delay loading LMDB data until after initialization to avoid "can't pickle Environment Object" error
+        self.env = lmdb.open(
+            self.db_path, 
+            subdir=os.path.isdir(self.db_path),
+            readonly=True, 
+            lock=False
+        )
+        
+        self.length = self.env.stat()['entries']
+
+        # -- New fields --
+        # If channels_to_use is None or empty, default to all available channels
+        if channels_to_use is None or len(channels_to_use) == 0:
+            channels_to_use = list(self.CHANNEL_MAP.keys())  # all: ['kappa','ksz','tsz','cib','rad']
+        self.channels_to_use = channels_to_use
+        
+        # Convert channel names to indices
+        self.channel_indices = [self.CHANNEL_MAP[ch] for ch in self.channels_to_use]
+        
+        # Noise dictionary (channel_name -> float). If None, no noise is applied.
+        self.noise_dict = noise_dict if noise_dict is not None else {}
+        
+        # Whether to apply the scaling transforms or not
+        self.apply_scaling = apply_scaling
+        
+        # The shape of the data in the LMDB
+        self.data_shape = data_shape
+        
+        # (Optional) just to keep track of indexes if you need it
         self.list = []
+    
     def _init_db(self):
-        self.env = lmdb.open(self.db_path, subdir=os.path.isdir(self.db_path),
-            readonly=True, lock=False)
+        """Helper to re-open LMDB if needed."""
+        self.env = lmdb.open(
+            self.db_path, 
+            subdir=os.path.isdir(self.db_path),
+            readonly=True, 
+            lock=False
+        )
         self.txn = self.env.begin()
         self.length = self.env.stat()['entries']
-            
+    
     def __getitem__(self, index):
         # Delay loading LMDB data until after initialization
         if self.env is None:
             self._init_db()
-        self.list.append(index)
-        with self.env.begin() as txn:
-            lmdb_data = np.frombuffer(txn.get('{:08}'.format(index).encode('ascii')), dtype=np.float64).astype(np.float64).reshape((5, 64, 64)).copy() #.astype(np.float32)
-            lmdb_data = self.scale_data(lmdb_data)
-            # lmdb_data = np.flip(lmdb_data, axis=0)
-        return lmdb_data
-
-    def scale_data(self, images, noise_kappa=True):
-        kap_mean =  0.0024131738313520608 
-        ksz_mean =  0.5759176599953563 
-
-        kap_std =  0.11190232474340092
-        ksz_std =  2.0870242684435416
-
-        tsz_std =  3.2046874257710276 
-        trans_tsz_mean =  -0.9992715262205959 
-        trans_tsz_std =  0.23378351341581394
-
-        cib_std =  16.5341785469026 
-        trans_cib_mean =  0.7042645521815042 
-        trans_cib_std =  0.3754746350117235
-
-        rad_std =  0.0004017594060247909 
-        trans_rad_mean =  0.6288525847415318 
-        trans_rad_std =  2.1106109860689175
-
-        lmdb_data = np.copy(images)
-
-        if noise_kappa:
-            noise_level = self.noise_level
-            noise = np.random.normal(loc=0, scale=noise_level, size=lmdb_data[0, :, :].shape)
-            lmdb_data[0, :, :] = (lmdb_data[0, :, :] + noise)
-
-        lmdb_data[0, :, :] = (lmdb_data[0, :, :] - kap_mean)/kap_std
-        lmdb_data[1, :, :] = (lmdb_data[1, :, :] - ksz_mean)/ksz_std
-
-        lmdb_data[2, :, :] = np.sign(lmdb_data[2, :, :])*(np.log(np.abs(lmdb_data[2, :, :])/tsz_std + 1))
-        lmdb_data[2, :, :] = (lmdb_data[2, :, :] - trans_tsz_mean)/trans_tsz_std
-
-        lmdb_data[3, :, :] = np.sign(lmdb_data[3, :, :])*(np.log(np.abs(lmdb_data[3, :, :])/cib_std + 1))
-        lmdb_data[3, :, :] = (lmdb_data[3, :, :] - trans_cib_mean)/trans_cib_std
-
-        lmdb_data[4, :, :] = np.sign(lmdb_data[4, :, :])*(np.log(np.abs(lmdb_data[4, :, :])/rad_std + 1))
-        lmdb_data[4, :, :] = (lmdb_data[4, :, :] - trans_rad_mean)/trans_rad_std
-
-        return lmdb_data[[0, 3], :, :]
-    
-    def reverse_scale(self, images):
-        kap_mean =  0.0024131738313520608 
-        ksz_mean =  0.5759176599953563 
-
-        kap_std =  0.11190232474340092
-        ksz_std =  2.0870242684435416
-
-        tsz_std =  3.2046874257710276 
-        trans_tsz_mean =  -0.9992715262205959 
-        trans_tsz_std =  0.23378351341581394
-
-        cib_std =  16.5341785469026 
-        trans_cib_mean =  0.7042645521815042 
-        trans_cib_std =  0.3754746350117235
-
-        rad_std =  0.0004017594060247909 
-        trans_rad_mean =  0.6288525847415318 
-        trans_rad_std =  2.1106109860689175
-
-        data = np.copy(images)
-        data[:, 0, :, :] = data[:, 0, :, :]*kap_std + kap_mean
-        data[:, 1, :, :] = data[:, 1, :, :]*ksz_std + ksz_mean
-        data[:, 2, :, :] = data[:, 2, :, :]*trans_tsz_std + trans_tsz_mean
-        data[:, 3, :, :] = data[:, 3, :, :]*trans_cib_std + trans_cib_mean
-        data[:, 4, :, :] = data[:, 4, :, :]*trans_rad_std + trans_rad_mean
         
-        data[:, 2, :, :] = np.sign(data[:, 2, :, :])*(np.exp(data[:, 2, :, :]*np.sign(data[:, 2, :, :])) - 1)*tsz_std
-        data[:, 3, :, :] = np.sign(data[:, 3, :, :])*(np.exp(data[:, 3, :, :]*np.sign(data[:, 3, :, :])) - 1)*cib_std
-        data[:, 4, :, :] = np.sign(data[:, 4, :, :])*(np.exp(data[:, 4, :, :]*np.sign(data[:, 4, :, :])) - 1)*rad_std
+        self.list.append(index)
+        
+        # Read raw bytes
+        with self.env.begin() as txn:
+            raw_data = txn.get('{:08}'.format(index).encode('ascii'))
+        
+        # Convert bytes -> np array, then reshape
+        lmdb_data = np.frombuffer(raw_data, dtype=np.float64).reshape(self.data_shape)
+        
+        # Optionally apply noise & scaling
+        if self.apply_scaling:
+            lmdb_data = self._apply_noise(lmdb_data)
+            lmdb_data = self._apply_scaling(lmdb_data)
+        else:
+            # If not scaling, we can still apply noise if desired
+            lmdb_data = self._apply_noise(lmdb_data, do_scaling=False)
+        
+        # Select only the channels user asked for
+        # final_data will have shape = (len(self.channel_indices), H, W)
+        final_data = lmdb_data[self.channel_indices, :, :]
+        
+        return final_data
+    
+    def _apply_noise(self, data, do_scaling=True):
+        """
+        Apply noise to the specified channels. 
+        If 'channel_name' is in self.noise_dict, add Gaussian noise with that std.
+        """
+        data = np.copy(data)  # so we don't modify in-place accidentally
+        
+        for ch_name, noise_std in self.noise_dict.items():
+            ch_idx = self.CHANNEL_MAP[ch_name]
+            # Add noise only if that channel is within the data's shape
+            if ch_idx < data.shape[0]:
+                noise = np.random.normal(loc=0.0, scale=noise_std, size=data[ch_idx, :, :].shape)
+                data[ch_idx, :, :] += noise
+        
+        return data
+
+    def _apply_scaling(self, images):
+        """
+        This uses your original scaling logic for 
+        (kappa, ksz, tsz, cib, rad) => indices (0,1,2,3,4).
+        Only applies if those channels exist in 'images'.
+        """
+        data = np.copy(images)
+        
+        # Means, stds, etc.
+        kap_mean =  0.0024131738313520608 
+        ksz_mean =  0.5759176599953563 
+        kap_std  =  0.11190232474340092
+        ksz_std  =  2.0870242684435416
+
+        tsz_std  =  3.2046874257710276 
+        trans_tsz_mean = -0.9992715262205959 
+        trans_tsz_std  =  0.23378351341581394
+
+        cib_std  =  16.5341785469026 
+        trans_cib_mean =  0.7042645521815042 
+        trans_cib_std  =  0.3754746350117235
+
+        rad_std  =  0.0004017594060247909 
+        trans_rad_mean =  0.6288525847415318 
+        trans_rad_std  =  2.1106109860689175
+
+        # 0: kappa
+        if 0 < data.shape[0]:  # i.e. data has at least 1 channel
+            data[0, :, :] = (data[0, :, :] - kap_mean) / kap_std
+
+        # 1: ksz
+        if 1 < data.shape[0]:
+            data[1, :, :] = (data[1, :, :] - ksz_mean) / ksz_std
+
+        # 2: tsz
+        if 2 < data.shape[0]:
+            data[2, :, :] = np.sign(data[2, :, :]) * np.log(np.abs(data[2, :, :]) / tsz_std + 1)
+            data[2, :, :] = (data[2, :, :] - trans_tsz_mean) / trans_tsz_std
+
+        # 3: cib
+        if 3 < data.shape[0]:
+            data[3, :, :] = np.sign(data[3, :, :]) * np.log(np.abs(data[3, :, :]) / cib_std + 1)
+            data[3, :, :] = (data[3, :, :] - trans_cib_mean) / trans_cib_std
+
+        # 4: rad
+        if 4 < data.shape[0]:
+            data[4, :, :] = np.sign(data[4, :, :]) * np.log(np.abs(data[4, :, :]) / rad_std + 1)
+            data[4, :, :] = (data[4, :, :] - trans_rad_mean) / trans_rad_std
 
         return data
-    
 
-    
+    def reverse_scale(self, images):
+        """
+        Reverse the scaling. 
+        If you only used certain channels, you need to pass them in the same order they were returned.
+        For example, if you used ['kappa','cib'], then images will have shape (B,2,H,W) in that order.
+        
+        This method tries to reverse scale in the order [kappa, ksz, tsz, cib, rad].
+        Make sure that aligns with how you're passing `images`.
+        """
+        # shape of 'images' expected: (batch, channels_used, H, W)
+
+        kap_mean =  0.0024131738313520608 
+        ksz_mean =  0.5759176599953563 
+        kap_std  =  0.11190232474340092
+        ksz_std  =  2.0870242684435416
+
+        tsz_std  =  3.2046874257710276 
+        trans_tsz_mean = -0.9992715262205959 
+        trans_tsz_std  =  0.23378351341581394
+
+        cib_std  =  16.5341785469026 
+        trans_cib_mean =  0.7042645521815042 
+        trans_cib_std  =  0.3754746350117235
+
+        rad_std  =  0.0004017594060247909 
+        trans_rad_mean =  0.6288525847415318 
+        trans_rad_std  =  2.1106109860689175
+
+        data = np.copy(images)
+
+        # We need a careful approach: identify which channels in data correspond to which transformations
+        # One way: for i in range(data.shape[1]), check which channel_index it corresponds to.
+
+        # Example: if self.channels_to_use = ['kappa','tsz','cib'],
+        #   then self.channel_indices = [0,2,3].
+        #   The data in images[:, 0, ...] => channel 0 => 'kappa'
+        #   The data in images[:, 1, ...] => channel 2 => 'tsz'
+        #   The data in images[:, 2, ...] => channel 3 => 'cib'
+
+        for i, ch_idx in enumerate(self.channel_indices):
+            if ch_idx == 0:  # kappa
+                data[:, i, :, :] = data[:, i, :, :] * kap_std + kap_mean
+
+            elif ch_idx == 1:  # ksz
+                data[:, i, :, :] = data[:, i, :, :] * ksz_std + ksz_mean
+
+            elif ch_idx == 2:  # tsz
+                data[:, i, :, :] = data[:, i, :, :] * trans_tsz_std + trans_tsz_mean
+                # undo sign/log
+                data[:, i, :, :] = np.sign(data[:, i, :, :]) * \
+                                   (np.exp(np.abs(data[:, i, :, :])) - 1) * tsz_std
+
+            elif ch_idx == 3:  # cib
+                data[:, i, :, :] = data[:, i, :, :] * trans_cib_std + trans_cib_mean
+                data[:, i, :, :] = np.sign(data[:, i, :, :]) * \
+                                   (np.exp(np.abs(data[:, i, :, :])) - 1) * cib_std
+
+            elif ch_idx == 4:  # rad
+                data[:, i, :, :] = data[:, i, :, :] * trans_rad_std + trans_rad_mean
+                data[:, i, :, :] = np.sign(data[:, i, :, :]) * \
+                                   (np.exp(np.abs(data[:, i, :, :])) - 1) * rad_std
+
+        return data
+
     def get_stat(self):
         return self.env.stat()
 
@@ -120,7 +263,7 @@ class My_lmdb(Dataset):
 
     def __repr__(self):
         return self.__class__.__name__ + ' (' + self.db_path + ')'
-    
+   
 
 class yuuki_256(Dataset):    
     def __init__(self, db_path, file_path, transformer, num_classes, class_cond, noise_level=0.0):

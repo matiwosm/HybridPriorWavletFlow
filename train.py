@@ -77,18 +77,32 @@ def main():
         if not os.path.exists(directory_path):
             os.makedirs(directory_path)
 
+    # bdir = cf.dataset_path
+    # file = "data.mdb"
+    # transformer1 = None
+    # noise_level = 0.025
+    # if cf.dataset == 'My_lmdb':
+    #     print('loading yuuki sims proper')
+    #     dataset = My_lmdb(bdir, file, transformer1, 1, False, noise_level)
+    # elif cf.dataset == 'yuuki_256':
+    #     print('loading yuuki 256')
+    #     dataset = yuuki_256(bdir, file, transformer1, 1, False, noise_level)
+
     bdir = cf.dataset_path
     file = "data.mdb"
-    transformer1 = None
-    noise_level = 0.025
-    if cf.dataset == 'My_lmdb':
-        print('loading yuuki sims proper')
-        dataset = My_lmdb(bdir, file, transformer1, 1, False, noise_level)
-    elif cf.dataset == 'yuuki_256':
-        print('loading yuuki 256')
-        dataset = yuuki_256(bdir, file, transformer1, 1, False, noise_level)
 
-
+    # Create the dataset
+    dataset = My_lmdb(
+        db_path=bdir,
+        file_path=file,
+        transformer=None,
+        num_classes=1,
+        class_cond=False,
+        channels_to_use=cf.channels_to_get,
+        noise_dict=cf.noise_dict,        # noise only these channels
+        apply_scaling=True,           # do the scaling
+        data_shape=cf.data_shape       
+    )
 
     warmup_loader = DataLoader(dataset, batch_size=cf.batch_size[args.level], shuffle=False, drop_last=True)
     train_loader = torch.utils.data.DataLoader(
@@ -129,21 +143,25 @@ def main():
         print('loading ps ', cf.ps_path+str(nx)+'x'+str(nx)+'.dat')
         df = pd.read_csv(cf.ps_path+str(nx)+'x'+str(nx)+'.dat', sep=";")
         df.columns = df.columns.str.strip()
-        power_spec = np.array([df['ell'], df['low_auto_ch0'], df['low_auto_ch1'],
-                                df['high_horizontal_auto_ch0'], df['high_vertical_auto_ch0'], 
-                                df['high_diagonal_auto_ch0'], df['high_horizontal_auto_ch1'], 
-                                df['high_vertical_auto_ch1'], df['high_diagonal_auto_ch1'],
-                                df['low_cross_ch0_ch1'], df['high_horizontal_cross_ch0_ch1'],
-                                df['high_vertical_cross_ch0_ch1'], df['high_diagonal_cross_ch0_ch1']])
-        power_spec = np.transpose(power_spec)
-        prior = corr_prior.CorrelatedNormal_dwt(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,power_spec,device, freq=freq, prior_type=prior_type)
+        power_spec = df.values  # shape (N_ell, N_columns)
+
+        # 3) Build dictionary {col_name -> col_index}
+        colnames = list(df.columns)
+        colname_to_index = {name: i for i, name in enumerate(colnames)}
+        if cf.unnormalize_prior == False:
+            norm_std = None
+        else:
+            norm_std = mean_stds_all_levels
+        prior = corr_prior.CorrelatedNormalDWTGeneral(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,cl_theo=power_spec,colname_to_index=colname_to_index,torch_device=device, freq=freq, n_channels=cf.imShape[0], prior_type=prior_type, norm_std=norm_std)
     else:
+        norm_std = None
         prior_type = 'WN'
         shape = (cf.batch_size[args.level], N*cf.imShape[0], nx, nx)
         prior = corr_prior.SimpleNormal(torch.zeros(shape).to(device), torch.ones(shape).to(device))
         
     model = WaveletFlow(cf=p, cond_net=Conditioning_network(), partial_level=p_level, prior=prior, stds=mean_stds_all_levels, priortype=prior_type).to(device)
     print('Prior type = ', prior_type)
+    print('norm_std = ', norm_std)
     if resume:
         model.load_state_dict(torch.load(directory_path + selected_files[p_level-1]))
         print('loaded ', directory_path + selected_files[p_level-1], selected_files[p_level-1][19:-8])
@@ -172,6 +190,7 @@ def main():
                 elapsed_time = time.time() - start_time
                 print(f"Epoch: {ep} Level: {p_level}  Progress:      {round((idx * 100) / (len(loader)), 4)}% Likelihood:      {np.mean(ep_loss)} Patience:      {round(patience, 5)}   Time:  {elapsed_time}" , end="\n")
                 sys.stdout.flush()
+                
 
             x = x.to(device)
             optimizer.zero_grad()

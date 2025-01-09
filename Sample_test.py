@@ -145,7 +145,7 @@ def compute_and_plot_minkowski_functionals_no_prior(
 
         # Get final maps (Target, Sample)
         tar_map, smp_map = get_final_maps_from_model(
-            model, target, mean_stds_all_levels, cond_on_target
+            model, target, mean_stds_all_levels, cf, cond_on_target
         )
 
         tar_map = tar_map.detach().cpu().numpy()  # (B, C, H, W)
@@ -153,13 +153,17 @@ def compute_and_plot_minkowski_functionals_no_prior(
 
         # Combine them to get a universal min/max
         combined = np.concatenate([tar_map, smp_map], axis=0)  # shape (2B, C, H, W)
+        q_min = 5.0   # or 5, or 2, etc.
+        q_max = 95.0  # or 95, etc.
+
+        # after you get 'combined' for each batch:
         if global_min is None:
             # shape (C,)
-            global_min = combined.min(axis=(0,2,3))
-            global_max = combined.max(axis=(0,2,3))
+            global_min = np.percentile(combined, q_min, axis=(0, 2, 3))
+            global_max = np.percentile(combined, q_max, axis=(0, 2, 3))
         else:
-            global_min = np.minimum(global_min, combined.min(axis=(0,2,3)))
-            global_max = np.maximum(global_max, combined.max(axis=(0,2,3)))
+            global_min = np.minimum(global_min, np.percentile(combined, q_min, axis=(0, 2, 3)))
+            global_max = np.maximum(global_max, np.percentile(combined, q_max, axis=(0, 2, 3)))
 
     if global_min is None or global_max is None:
         print("No data found in iter_loader.")
@@ -216,7 +220,7 @@ def compute_and_plot_minkowski_functionals_no_prior(
 
         target = batch.to(device)
         tar_map, smp_map = get_final_maps_from_model(
-            model, target, mean_stds_all_levels, cond_on_target
+            model, target, mean_stds_all_levels, cf, cond_on_target
         )
 
         tar_map = tar_map.detach().cpu().numpy()
@@ -327,7 +331,7 @@ def compute_and_plot_minkowski_functionals_no_prior(
 ###############################################################################
 # Helper function to retrieve final maps (Target, Sample) from the model
 ###############################################################################
-def get_final_maps_from_model(model, target, mean_stds_all_levels, cond_on_target=True):
+def get_final_maps_from_model(model, target, mean_stds_all_levels, cf, cond_on_target=True):
     """
     Return final (target_map, sample_map) from the model, both shape (B, C, H, W).
     The sample is taken from the last element of model.sample(...).
@@ -342,7 +346,7 @@ def get_final_maps_from_model(model, target, mean_stds_all_levels, cond_on_targe
     # samples = model.sample(...)[-1]
     samples = model.sample(mean_stds_all_levels, 
                            target=target, 
-                           n_batch=64, 
+                           n_batch=cf.sample_batch_size, 
                            cond_on_target=cond_on_target, 
                            comp='low')[-1]
 
@@ -376,8 +380,8 @@ def compute_MFs_for_map(map_2d, thresholds):
 
 
 
-def compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, plotSaveDir, nLevels=6,
-                                       get_train_modes=False, cond_on_target=False, max_iterations=3000):
+def compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, plotSaveDir, comps_to_get, nLevels=6,
+                                    get_train_modes=False, cond_on_target=False, max_iterations=3000):
     """
     Compute power spectra statistics over many batches and produce two figures:
     1. Fractional difference plots (one figure)
@@ -391,11 +395,25 @@ def compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_lev
     def freq_type(level):
         return 'low' if (level == cf.baseLevel or not get_train_modes) else 'high'
 
-    def get_component_names(freq):
-        return (['comp1_kap', 'comp1_cib'] if freq == 'low'
-                else ['comp1_kap', 'comp2_kap', 'comp3_kap', 'comp1_cib', 'comp2_cib', 'comp3_cib'])
+    def get_component_names(components, freq='high'):
+        """
+        Generate component names based on the input list of component strings.
 
-    bin_sizes_log = [2, 2, 3, 5, 5, 10, 13, 15, 17, 20]
+        :param components: List of component strings, e.g., ['kap', 'cib', 'tsz'].
+        :param freq: Either 'high' or 'low'. Determines the naming convention.
+        :return: List of component names.
+        """
+        if len(components) == 0:
+            components = ['kappa', 'ksz', 'tsz', 'cib', 'rad']
+        if freq == 'low':
+            return [f"l_{comp}" for comp in components]
+        elif freq == 'high':
+            suffixes = ['hori', 'ver', 'dia']
+            return [f"h_{suffix}_{comp}" for comp in components for suffix in suffixes]
+        else:
+            raise ValueError("Invalid value for 'freq'. Must be 'low' or 'high'.")
+    timer = 0
+    bin_sizes_log = [2, 2, 2, 4, 5, 10, 13, 15, 17, 20]
     util_obj = util()
 
     accumulators = {}
@@ -408,19 +426,23 @@ def compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_lev
         except StopIteration:
             break
         if i % 10 == 0:
-            print(f"Processed {i} iterations...")
+            print(f"Processed {i} iterations... in {timer} seconds")
 
-        latents = model.sample_latents()
+        latents = model.sample_latents(n_batch=cf.sample_batch_size)
         # latents = unnormalize_training(latents, mean_stds_all_levels, 2, cf.baseLevel)
 
         if get_train_modes:
-            samples = model.sample(mean_stds_all_levels, target=target, n_batch=64, cond_on_target=cond_on_target, comp='high')
+            start = time.time()
+            samples = model.sample(mean_stds_all_levels, target=target, n_batch=cf.sample_batch_size, cond_on_target=cond_on_target, comp='high')
+            timer += (time.time() - start)
             data = get_training_modes(target, model, cf.nLevels, cf.baseLevel)
         else:
-            samples = model.sample(mean_stds_all_levels, target=target, n_batch=64, cond_on_target=cond_on_target, comp='low')
+            start = time.time()
+            samples = model.sample(mean_stds_all_levels, target=target, n_batch=cf.sample_batch_size, cond_on_target=cond_on_target, comp='low')
+            timer += (time.time() - start)
             data = get_sample_modes(target, model, cf.nLevels, cf.baseLevel)
             latents[-(cf.nLevels - cf.baseLevel):] = data[-(cf.nLevels - cf.baseLevel):]
-
+        
         B = target.shape[0]
         total_count += B
 
@@ -437,7 +459,7 @@ def compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_lev
             # print(d_map.shape, s_map.shape, p_map.shape)
             B, C, H, W = d_map.shape
             freq = freq_type(level)
-            comps = get_component_names(freq)
+            comps = get_component_names(comps_to_get, freq)
             size_idx = level if level < len(bin_sizes_log) else -1
             size = bin_sizes_log[size_idx]
             dx = (0.5/60. * np.pi/180.) * 2**(nLevels - level)
@@ -699,7 +721,7 @@ def main():
             os.makedirs(cf.plotSaveDir)
 
     prior_type = cf.priorType
-    for i in range(p.baseLevel, args.hlevel+1):
+    for i in range(p.baseLevel, cf.nLevels+1):
         p_level = i
         print('loading stds from ', cf.std_path)
         with open(cf.std_path, 'r') as f:
@@ -726,18 +748,20 @@ def main():
         if p_level not in (cf.gauss_priors):
             dx = (0.5/60. * np.pi/180.)*(2**(dwt_level_number))
             rfourier_shape = (N*cf.imShape[0], nx, int(nx/2 + 1), 2)
-            print('loading ps ', cf.ps_path+str(nx)+'x'+str(nx)+'.dat')
             df = pd.read_csv(cf.ps_path+str(nx)+'x'+str(nx)+'.dat', sep=";")
             df.columns = df.columns.str.strip()
-            power_spec = np.array([df['ell'], df['low_auto_ch0'], df['low_auto_ch1'],
-                                    df['high_horizontal_auto_ch0'], df['high_vertical_auto_ch0'], 
-                                    df['high_diagonal_auto_ch0'], df['high_horizontal_auto_ch1'], 
-                                    df['high_vertical_auto_ch1'], df['high_diagonal_auto_ch1'],
-                                    df['low_cross_ch0_ch1'], df['high_horizontal_cross_ch0_ch1'],
-                                    df['high_vertical_cross_ch0_ch1'], df['high_diagonal_cross_ch0_ch1']])
-            power_spec = np.transpose(power_spec)
+            power_spec = df.values  # shape (N_ell, N_columns)
+
+            # 3) Build dictionary {col_name -> col_index}
+            colnames = list(df.columns)
+            colname_to_index = {name: i for i, name in enumerate(colnames)}
             priortype = prior_type
-            prior = corr_prior.CorrelatedNormal_dwt(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,power_spec,device, freq=freq, prior_type=prior_type)
+
+            if cf.unnormalize_prior == False:
+                norm_std = None
+            else:
+                norm_std = mean_stds_this_levels
+            prior = corr_prior.CorrelatedNormalDWTGeneral(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,cl_theo=power_spec,colname_to_index=colname_to_index,torch_device=device, freq=freq, n_channels=cf.imShape[0], prior_type=prior_type, norm_std=norm_std)
         else:
             priortype = 'WN'
             shape = (N*cf.imShape[0], nx, nx)
@@ -760,23 +784,29 @@ def main():
 
     model = model.to(device)
     # init act norm
-    for i in range(p.baseLevel, args.hlevel + 1):
+    for i in range(p.baseLevel, cf.nLevels + 1):
         model.sub_flows[i].set_actnorm_init()
     model = model.eval()
 
-    #load data: for new dataset add a new elif statement
+
     bdir = cf.val_dataset_path
     file = "data.mdb"
-    transformer1 = None
-    noise_level = 0.025
-    if cf.dataset == 'My_lmdb':
-        print('loading yuuki sims proper')
-        dataset = My_lmdb(bdir, file, transformer1, 1, False, noise_level)
-    elif cf.dataset == 'yuuki_256':
-        print('loading yuuki 256')
-        dataset = yuuki_256(bdir, file, transformer1, 1, False, noise_level)
 
-    loader = DataLoader(dataset, batch_size=64, shuffle=True, pin_memory=True)
+    # Create the dataset
+    dataset = My_lmdb(
+        db_path=bdir,
+        file_path=file,
+        transformer=None,
+        num_classes=1,
+        class_cond=False,
+        channels_to_use=cf.channels_to_get,
+        noise_dict=cf.noise_dict,        # noise only these channels
+        apply_scaling=True,           # do the scaling
+        data_shape=cf.data_shape       
+    )
+
+
+    loader = DataLoader(dataset, batch_size=cf.sample_batch_size, shuffle=True, pin_memory=True)
     iter_loader = iter(loader)
 
     print(len(loader))
@@ -786,8 +816,8 @@ def main():
 
     #calculate and plot power spectra and minkowski functionals
     start = time.time()
-    compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, nLevels=cf.nLevels, get_train_modes=False, cond_on_target=False, max_iterations=20)
-    compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, nLevels=cf.nLevels, get_train_modes=True, cond_on_target=False, max_iterations=20)
+    compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=False, cond_on_target=False, max_iterations=20)
+    compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=True, cond_on_target=False, max_iterations=20)
 
 
     compute_and_plot_minkowski_functionals_no_prior(
@@ -808,7 +838,6 @@ def main():
 if __name__  == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, default="configs/example_config_hcc_prior.py", help='specify config')
-    parser.add_argument('--hlevel', type=int, default=6, help='highest level wavelet to sample')
     parser.add_argument('--data', type=str, default="agora", help='input data')
     parser.add_argument('--savesamples', type=str, default=False, help='save samples')
     parser.add_argument('--plotstats', type=str, default=True, help='plot stats')
