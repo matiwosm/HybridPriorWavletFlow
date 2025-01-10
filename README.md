@@ -2,6 +2,7 @@
 
 This repository extends the WaveletFlowPyTorch project, originally found here: [WaveletFlowPyTorch](https://github.com/A-Vzer/WaveletFlowPytorch).
 
+This readme is very outdated. Needs to be updated.
 ## Installation
 
 To install the required dependencies, run:
