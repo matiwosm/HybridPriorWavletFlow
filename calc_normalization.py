@@ -21,18 +21,25 @@ from helper import utils as util
 from src.dwt.wavelets import Haar
 from src.dwt.dwt import Dwt
 
+parser = argparse.ArgumentParser()
+parser.add_argument('--config', type=str, default="configs/HCC_prior_best_model_256x256_all_levels_kap_noise_0.01.py", help='specify config')
+parser.add_argument('--output', type=str, default="norm_stds/output.json", help='missing output file name')
+args = parser.parse_args()
+
+
 torch.set_default_dtype(torch.float64)
-torch.set_default_tensor_type(torch.cuda.DoubleTensor)
-# Assume 'dataset' is your dataset, and 'DataLoader' is imported
-# Assume 'dwt' is your DWT transform object
-# Assume 'torch_device' is defined (e.g., 'cuda' or 'cpu')
+torch.set_default_tensor_type(torch.DoubleTensor)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-config_file = 'configs/example_config_hcc_prior_tsz.py'
+config_file = args.config
+filename = args.output
 cf = SourceFileLoader('cf', config_file).load_module()
 
 # Number of DWT levels to compute
-max_m = 5 # Adjust as needed
+max_m = cf.nLevels - 1 # Adjust as needed
+
+print(filename)
+print(config_file, device, max_m)
 
 # Dictionary to hold mean stds for each DWT level
 mean_stats_all_levels = {}
@@ -153,7 +160,6 @@ for m, comp_stats in mean_stats_all_levels.items():
         mean_stats_serializable[m][comp_type] = stats
 
 # Save to a JSON file
-filename = f'norm_stds/64x64_final_mean_stats_all_levels_tsz.json'  # Modified filename
 with open(filename, 'w') as f:
     json.dump(mean_stats_serializable, f)
 

@@ -38,7 +38,7 @@ sample_batch_size = 512
 
 #powerspectra and normalization
 std_path = 'norm_stds/64x64_final_mean_stats_all_levels_all_comps_kappa_noise_0.025.json'
-ps_path = 'ps/64x64_kappa_noise_0.025_all_comps_dwtlevel'
+ps_path = 'ps/64x64_kappa_noise_0.025_all_comps/dwtlevel'
 
 #output paths
 saveDir = '/sdf/group/kipac/users/mati/best_model_64_noised_kappa_all_comps_CC/'

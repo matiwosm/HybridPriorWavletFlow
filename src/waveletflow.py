@@ -21,8 +21,8 @@ class WaveletFlow(nn.Module):
         self.prior_type = priortype
         if partial_level == -1 or partial_level == self.base_level:
             base_size = 2 ** self.base_level
-            cf.K = cf.stepsPerResolution[partial_level]
-            cf.L = cf.stepsPerResolution_L[partial_level]
+            cf.K = cf.stepsPerResolution[partial_level - 1]
+            cf.L = cf.stepsPerResolution_L[partial_level - 1]
             shape = (cf.imShape[0], base_size, base_size)
             self.base_flow = Glow(cf, shape, False, prior, self.prior_type)
         else:
@@ -41,7 +41,6 @@ class WaveletFlow(nn.Module):
                 cf.L = cf.stepsPerResolution_L[level-1]
                 shape = (cf.imShape[0] * 3, h, w)
                 self.sub_flows.append(Glow(cf, shape, cf.conditional, prior, self.prior_type))
-
         self.sub_flows = nn.ModuleList(self.sub_flows)
 
     def forward(self, x, std=None, partial_level=-1):
@@ -222,7 +221,7 @@ class WaveletFlow(nn.Module):
                 x = self.dwt.inverse({'low': base, 'high': x_unnorm})
 
                 # If conditioning on target at lower levels:
-                if cond_on_target:
+                if cond_on_target and level < 5:
                     # Use the target's data instead of the reconstructed base if desired
                     x = data[level - self.base_level]
                 # print('flow not none', x.shape)

@@ -1,7 +1,7 @@
 #this is an example config file for training a HybridPriorWaveletFlow with a HCC prior on the Yuuki simulations
 
 model = "waveletflow"
-stepsPerResolution = [2, 8, 4, 8, 16, 16, 16, 16, 16, 16, 16]
+stepsPerResolution = [8, 8, 16, 16, 16, 16, 16, 16, 16, 16, 16]
 stepsPerResolution_L = [3] * 8
 normalize = [False] * 10
 nLevels = 6     # Number of DWT levels (log_2(nx))
@@ -32,11 +32,11 @@ noise_dict = {}
 data_shape = (5, 64, 64)   #this is the shape of the data in the dataset
 dataset_path = '/sdf/group/kipac/users/mati/yuuki_sim_train_64x64/'
 val_dataset_path = '/sdf/group/kipac/users/mati/yuuki_sim_val_64x64/'
-sample_batch_size = 1024
+sample_batch_size = 512
 
 #powerspectra and normalization
 std_path = 'norm_stds/64x64_final_mean_stats_all_levels_tsz.json'
-ps_path = 'ps/tsz_yuuki_1comps_dwtlevel'
+ps_path = 'ps/64x64_yuuki_tsz_only/dwtlevel'
 
 #output paths
 saveDir = '/sdf/group/kipac/users/mati/best_model_64_tsz/'

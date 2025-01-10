@@ -70,11 +70,21 @@ def compute_and_accumulate_spectra(comp_a, comp_b, nx, dx):
 
     return spectra_sum, ell
 
+parser = argparse.ArgumentParser()
+parser.add_argument('--config', type=str, default="configs/HCC_prior_best_model_256x256_all_levels_kap_noise_0.01.py", help='specify config')
+parser.add_argument('--output_dir', type=str, default="ps/256x256_kappa_noise_0.01_yuuki_2comps", help='missing output dir to save power spectra')
+args = parser.parse_args()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-config_file = 'configs/example_config_hcc_prior.py'
+config_file = args.config
+ps_path = args.output_dir
 cf = SourceFileLoader('cf', config_file).load_module()
 
+#dir to save plots
+if not os.path.exists(ps_path):
+        os.makedirs(ps_path)
+
+print(ps_path, config_file)
 
 wavelet = Haar().to(device)
 dwt = Dwt(wavelet=wavelet).to(device)
@@ -97,10 +107,10 @@ dataset = My_lmdb(
 )
 
 # Number of DWT levels to compute
-max_m = 5 # Adjust as needed
+max_m = cf.nLevels - 1
 
 # including the 'low' components and high-frequency components.
-for m in range(0, 5):
+for m in range(0, max_m):
     loader = DataLoader(dataset, batch_size=8096)
     util_obj = util()
     
@@ -222,7 +232,7 @@ for m in range(0, 5):
             comp_cross_mean_spectra[comp_type].append((i_ch, j_ch, mean_cross_spectrum))
 
     # Save results to a file
-    filename = f'ps/64x64_kappa_noise_{0.025}_yuuki_{dataset[0].shape[0]}comps_dwtlevel{nx}x{nx}.dat'
+    filename = f'{ps_path}/dwtlevel{nx}x{nx}.dat'
     with open(filename, 'w') as file:
         print('SAVING')
         # Write column headers

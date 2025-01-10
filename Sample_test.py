@@ -153,8 +153,8 @@ def compute_and_plot_minkowski_functionals_no_prior(
 
         # Combine them to get a universal min/max
         combined = np.concatenate([tar_map, smp_map], axis=0)  # shape (2B, C, H, W)
-        q_min = 5.0   # or 5, or 2, etc.
-        q_max = 95.0  # or 95, etc.
+        q_min = 2.0   # or 5, or 2, etc.
+        q_max = 98.0  # or 95, etc.
 
         # after you get 'combined' for each batch:
         if global_min is None:
@@ -315,7 +315,7 @@ def compute_and_plot_minkowski_functionals_no_prior(
             ax.errorbar(thr_array, fd_s, yerr=fd_s_err, label='(Sample-Target)/Target', fmt='.-')
             ax.axhline(0.0, color='k', linestyle='--')
             ax.set_xlabel(xlabels[ax_i])
-            ax.set_ylim(-0.5, 0.5)
+            ax.set_ylim(-0.1, 0.1)
             ax.set_ylabel(f"Frac. Diff. of {ylabels[ax_i]}")
             ax.set_title(f"Channel={c_i}, FracDiff {mf}")
             ax.legend()
@@ -749,6 +749,7 @@ def main():
             dx = (0.5/60. * np.pi/180.)*(2**(dwt_level_number))
             rfourier_shape = (N*cf.imShape[0], nx, int(nx/2 + 1), 2)
             df = pd.read_csv(cf.ps_path+str(nx)+'x'+str(nx)+'.dat', sep=";")
+            print('loading power spectra from ', cf.ps_path+str(nx)+'x'+str(nx)+'.dat')
             df.columns = df.columns.str.strip()
             power_spec = df.values  # shape (N_ell, N_columns)
 
@@ -781,7 +782,7 @@ def main():
             print(f"Total number of parameters: {total_params}")
             model.sub_flows[i] = model1.sub_flows[i]
             del model1
-
+        
     model = model.to(device)
     # init act norm
     for i in range(p.baseLevel, cf.nLevels + 1):
@@ -816,8 +817,8 @@ def main():
 
     #calculate and plot power spectra and minkowski functionals
     start = time.time()
-    compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=False, cond_on_target=False, max_iterations=20)
-    compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=True, cond_on_target=False, max_iterations=20)
+    compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=False, cond_on_target=False, max_iterations=100)
+    compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=True, cond_on_target=False, max_iterations=100)
 
 
     compute_and_plot_minkowski_functionals_no_prior(
@@ -828,7 +829,7 @@ def main():
     device, 
     cond_on_target=False,
     n_thresholds=50,
-    max_iterations=20,
+    max_iterations=100,
 )
 
     print(time.time() - start)
@@ -839,8 +840,6 @@ if __name__  == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, default="configs/example_config_hcc_prior.py", help='specify config')
     parser.add_argument('--data', type=str, default="agora", help='input data')
-    parser.add_argument('--savesamples', type=str, default=False, help='save samples')
-    parser.add_argument('--plotstats', type=str, default=True, help='plot stats')
     args = parser.parse_args()
     main()
 
