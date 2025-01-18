@@ -20,6 +20,8 @@ import pandas as pd
 from helper import utils as util
 from src.dwt.wavelets import Haar
 from src.dwt.dwt import Dwt
+from tqdm import tqdm
+
 def get_2d_power(nx, dx, r1, r2=None, num_bins=100):
         if (np.any(np.isnan(r1)) or np.any(np.isinf(r1))):
             print("whyyyyyy")
@@ -128,7 +130,7 @@ for m in range(0, max_m):
     # Initialize ell to None
     ell = None
 
-    for i, x in enumerate(loader):
+    for i, x in enumerate(tqdm(loader, desc=f"Processing level {m + 1}", unit="batch")):
         x = x.to(device).to(torch.float32)
         # Apply DWT m+1 times
         for k in range(m + 1):
@@ -140,7 +142,6 @@ for m in range(0, max_m):
         nx = x1.shape[-1]
         dx = (0.5 / 60. * np.pi / 180.) * 2 ** (m + 1)
         ell, bin_spectrum = get_2d_power(nx, dx, x1.cpu().numpy(), x1.cpu().numpy())
-        print(m, i, x1.shape, x2.shape)
 
         N_channels = x1.shape[1]  # Number of input channels
 
@@ -216,7 +217,7 @@ for m in range(0, max_m):
         # Auto spectra
         comp_mean_spectra[comp_type] = []
         for ch in range(N_channels):
-            print(comp_type, comp_mean_std[comp_type][ch])
+            # print(comp_type, comp_mean_std[comp_type][ch])
             # Normalize by total samples and squared mean standard deviation
             mean_spectrum = comp_auto_spectra_sum[comp_type][ch] / total_samples
             mean_std = comp_mean_std[comp_type][ch]

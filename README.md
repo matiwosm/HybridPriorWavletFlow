@@ -64,7 +64,7 @@ python train.py --level n --config configs/config_file.py
 ```
 
 - `n`: Specifies the DWT level to train.
-- `configs/config_file.py`: Configuration file for training. Refer to `configs/HCC_prior_best_model_256x256_all_levels_kap_noise_0.01.py` for detailed instructions on configuring the file.
+- `configs/config_file.py`: Configuration file for training. Refer to `configs/old_configs/HCC_prior_best_model_256x256_all_levels_kap_noise_0.01.py` for detailed instructions on configuring the file.
 
 ### 4. Sampling
 

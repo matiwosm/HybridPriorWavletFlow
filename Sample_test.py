@@ -654,7 +654,7 @@ def main():
     # Extracting the sorted list of files with maximum j for each i
     #selected files contain the file names of the models to be loaded
     selected_files = [info[0] for i, info in sorted(files_by_i.items())]
-    [print(f'Using {ml_file} for level {i}\n') for i,ml_file in enumerate(selected_files)]
+    [print(f'Using {ml_file} for level {i+1}\n') for i,ml_file in enumerate(selected_files)]
     print('loading normalization factors from ', cf.std_path, '\n')
     #dir to save plots
     if not os.path.exists(cf.plotSaveDir):
@@ -759,7 +759,7 @@ def main():
     #calculate and plot power spectra and minkowski functionals
     #caution: cond_on_target should be False for proper results. Set to True only for debuging.
     start = time.time()
-    # compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=False, cond_on_target=False, max_iterations=100)
+    compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=False, cond_on_target=False, max_iterations=20)
     # compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=True, cond_on_target=False, max_iterations=2)
 
 

@@ -20,6 +20,7 @@ import pandas as pd
 from helper import utils as util
 from src.dwt.wavelets import Haar
 from src.dwt.dwt import Dwt
+from tqdm import tqdm
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--config', type=str, default="configs/HCC_prior_best_model_256x256_all_levels_kap_noise_0.01.py", help='specify config')
@@ -28,8 +29,8 @@ args = parser.parse_args()
 
 
 torch.set_default_dtype(torch.float64)
-torch.set_default_tensor_type(torch.DoubleTensor)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+torch.set_default_device(device)
 
 config_file = args.config
 filename = args.output
@@ -38,8 +39,10 @@ cf = SourceFileLoader('cf', config_file).load_module()
 # Number of DWT levels to compute
 max_m = cf.nLevels - 1 # Adjust as needed
 
-print(filename)
-print(config_file, device, max_m)
+print('Saving outputs to ', filename)
+print('Using config file ', config_file)
+print('Device', device)
+print('Max level = ', max_m)
 
 # Dictionary to hold mean stds for each DWT level
 mean_stats_all_levels = {}
@@ -77,9 +80,7 @@ for m in range(0, max_m):
     high_types = ['high_horizontal', 'high_vertical', 'high_diagonal']
     n_high_types = len(high_types)
     
-    for i, x in enumerate(loader):
-        if (i % 10) == 0:
-            print(f"Processing batch {i}... out of {len(loader)}")
+    for i, x in enumerate(tqdm(loader, desc=f"Processing level {m + 1}", unit="batch")):
             
         # Apply DWT m+1 times
         for k in range(m + 1):
@@ -141,7 +142,7 @@ for m in range(0, max_m):
         for ch in range(N_channels):
             
             mean_std = comp_total_std[comp_type][ch] / num_batches
-            print(mean_std)
+            # print(mean_std)
             comp_stats[comp_type]['mean_std'].append(mean_std)
             comp_stats[comp_type]['min'].append(comp_min[comp_type][ch])  # Added
             comp_stats[comp_type]['max'].append(comp_max[comp_type][ch])  # Added

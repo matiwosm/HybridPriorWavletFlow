@@ -206,9 +206,9 @@ def plot_power(iter_loader, samples_dataloader, prior, step, cf, batch_num):
     fig_pow.savefig(pow_path)
     plt.close(fig_pow)
 
-config_file = 'configs/example_config_hcc_prior_rqs_tsz_only.py'
+config_file = 'configs/kappa_tsz_cib_nyquist_noise.py'
 cf = SourceFileLoader('cf', config_file).load_module()
-cf.channels_to_get = ['kappa', 'tsz']
+# cf.channels_to_get = ['kappa', 'tsz']
 # cf.noise_dict['tsz'] = [15.0, 21600]
 bdir = cf.val_dataset_path
 file = "data.mdb"

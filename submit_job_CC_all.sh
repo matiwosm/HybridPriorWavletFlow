@@ -1,10 +1,10 @@
 #!/bin/bash
 
 #SBATCH --partition=ada
-#SBATCH --job-name=nyq_kappa_noise%a
-#SBATCH --output=logs/nyquest_noise_kappa_cib%a_log.txt
-#SBATCH --error=logs/nyquest_noise_kappa_cib%a_error.txt
-#SBATCH --account=kipac
+#SBATCH --job-name=kappa_tsz_cib_nyquist_noise%a
+#SBATCH --output=logs/kappa_tsz_cib_nyquist_noise%a_log.txt
+#SBATCH --error=logs/kappa_tsz_cib_nyquist_noise%a_error.txt
+#SBATCH --account=kipac:kipac
 #SBATCH --ntasks=1
 #SBATCH --time=4-23:59:59
 #SBATCH --gpus=1
@@ -22,6 +22,6 @@ echo "CUDA_VISIBLE_DEVICES set to: $CUDA_VISIBLE_DEVICES"
 echo "Training level: $SLURM_ARRAY_TASK_ID"
 
 # Run the training command, using the array task ID as the level
-python train.py --level $SLURM_ARRAY_TASK_ID --config configs/kappa_cib_hcc_prior_noised_kappa_nyquest_noise.py
+python train.py --level $SLURM_ARRAY_TASK_ID --config configs/kappa_tsz_cib_nyquist_noise.py
 
 wait
