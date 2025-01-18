@@ -655,7 +655,7 @@ def main():
     #selected files contain the file names of the models to be loaded
     selected_files = [info[0] for i, info in sorted(files_by_i.items())]
     [print(f'Using {ml_file} for level {i}\n') for i,ml_file in enumerate(selected_files)]
-    print('loading normalization factors from ', cf.std_path)
+    print('loading normalization factors from ', cf.std_path, '\n')
     #dir to save plots
     if not os.path.exists(cf.plotSaveDir):
             os.makedirs(cf.plotSaveDir)
@@ -689,7 +689,7 @@ def main():
             dx = (0.5/60. * np.pi/180.)*(2**(dwt_level_number))
             rfourier_shape = (N*cf.imShape[0], nx, int(nx/2 + 1), 2)
             df = pd.read_csv(cf.ps_path+str(nx)+'x'+str(nx)+'.dat', sep=";")
-            print('loading power spectra from ', cf.ps_path+str(nx)+'x'+str(nx)+'.dat')
+            print('loading power spectra from ', cf.ps_path+str(nx)+'x'+str(nx)+'.dat\n')
             df.columns = df.columns.str.strip()
             power_spec = df.values  # shape (N_ell, N_columns)
 
@@ -716,12 +716,12 @@ def main():
             model = WaveletFlow(cf=p, cond_net=Conditioning_network(), partial_level=i, prior=prior, stds=mean_stds_this_levels, priortype=priortype)
             model.load_state_dict(torch.load(directory_path + selected_files[i - p.baseLevel], weights_only=True))
             total_params = sum(p.numel() for p in model.parameters())
-            print(f"Total number of parameters for level {p_level}: {total_params}")
+            print(f"Total number of parameters for level {p_level}: {total_params} \n")
         else:
             model1 = WaveletFlow(cf=p, cond_net=Conditioning_network(), partial_level=i, prior=prior, stds=mean_stds_this_levels, priortype=priortype)
             model1.load_state_dict(torch.load(directory_path + selected_files[i - p.baseLevel], weights_only=True))
             total_params = sum(p.numel() for p in model1.parameters())
-            print(f"Total number of parameters for level {p_level}: {total_params}")
+            print(f"Total number of parameters for level {p_level}: {total_params} \n")
             model.sub_flows[i] = model1.sub_flows[i]
             del model1
         
@@ -754,12 +754,12 @@ def main():
 
 
     total_params = sum(p.numel() for p in model.parameters())
-    print(f"Total number of parameters for all levels: {total_params}")
+    print(f"Total number of parameters for all levels: {total_params} \n")
 
     #calculate and plot power spectra and minkowski functionals
     #caution: cond_on_target should be False for proper results. Set to True only for debuging.
     start = time.time()
-    compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=False, cond_on_target=False, max_iterations=100)
+    # compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=False, cond_on_target=False, max_iterations=100)
     # compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=True, cond_on_target=False, max_iterations=2)
 
 
@@ -771,7 +771,7 @@ def main():
     device, 
     cond_on_target=False,
     n_thresholds=50,
-    max_iterations=50,
+    max_iterations=60,
 )
 
     print(time.time() - start)
