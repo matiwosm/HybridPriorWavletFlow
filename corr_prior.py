@@ -88,7 +88,6 @@ class CorrelatedNormalDWTGeneral:
         )
         self.rfourier_shape = loc.shape
         self.level = int(np.log2(nx))
-        print('level = ', self.level)
         
         # create the array of ells for reference (optional usage)
         self.ells_flat = self.get_ell(self.nx, self.dx).flatten().astype(np.float32)
@@ -367,7 +366,6 @@ class CorrelatedNormal_dwt:
         self.dist = torch.distributions.normal.Normal(torch.flatten(loc), torch.flatten(var))
         self.rfourier_shape = loc.shape
         self.level = int(np.log2(nx))
-        print('level = ', self.level)
         #create the array to multiply the fft with to get the desired power spectrum
         self.ells_flat = self.get_ell(self.nx, self.dx).flatten().astype(np.float32)
         

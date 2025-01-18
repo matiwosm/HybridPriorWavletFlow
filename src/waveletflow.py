@@ -90,82 +90,9 @@ class WaveletFlow(nn.Module):
                 latents.append(flow.sample_latents(n_batch=n_batch,temperature=temperature))
         return latents
     
-    def sample(self, mean_stds_all_levels, target=None, latents=None, partial_level=-1, comp='low', cond_on_target=False, n_batch=64):
+    def sample(self, mean_stds_all_levels=None, target=None, latents=None, partial_level=-1, comp='low', cond_on_target=False, n_batch=64):
         return self.sample_unnorm(target, latents, partial_level, comp, cond_on_target, n_batch)
         
-    def sample_norm(self, mean_stds_all_levels, target=None, latents=None, partial_level=-1, comp='low', cond_on_target=False, n_batch=64):
-        
-        # If target is provided, we condition on it by performing a DWT decomposition
-        data = []
-        if target is not None:
-            data.append(target)
-            # Decompose target down to the base level for conditioning if needed
-            for i in range(self.base_level+1, self.n_levels+1):
-                target = self.dwt.forward(target)['low']
-                data.append(target)
-            data.reverse()
-
-        if latents is None:
-            latents = self.sample_latents(n_batch=n_batch, temperature=1.0)
-        # print(latents[0].shape, latents[0][:2])
-        samples = []
-        samples_high_freq = []  # To store unnormalized high-frequency components
-
-        # Base level reconstruction
-        base_norm = self.base_flow.forward(latents[0], conditioning=None, temperature=1.0, reverse=True)[0]
-        std = mean_stds_all_levels[str(5 - int(np.log2(base_norm.shape[-1])))]
-
-        if cond_on_target:
-            # If conditioning on target, overwrite base_norm with normalized target low band
-            base_norm = normalize_dwt_components(data[0], std, 'low')
-
-        # Unnormalize base
-        base = unnormalize_dwt_components(base_norm, std, 'low')
-        # print(base[:2], base_norm[:2], base.shape, base_norm.shape)
-        samples.append(base)  # Append the base level reconstruction
-        samples_high_freq.append(base)
-
-        # Reconstruct upwards from base_level+1 to n_levels
-        final_level = self.base_level if partial_level == -1 else partial_level
-        for level in range(self.base_level+1, self.n_levels+1):
-            flow = self.sub_flows[level]
-            # print(std, level, self.base_level+1, self.n_levels+1)
-            if flow is not None:
-               
-                base_norm = normalize_dwt_components(base, std, 'low')
-                # print('base norm', base_norm[0])
-                conditioning = self.conditioning_network.encoder_list[level](base_norm)
-
-                latent = latents[level]  # Align indexing as per old code
-                x_norm = flow.forward(latent, conditioning=conditioning, temperature=1.0, reverse=True)[0]
-
-                # Unnormalize the 'high' frequency component
-                x_unnorm_high = unnormalize_dwt_components(x_norm, std, 'high')
-                samples_high_freq.append(x_unnorm_high.clone())
-                # if level == 3:
-                #     print('level 3', x_unnorm_high.shape, std['low']['mean_std'])
-                
-                # Inverse DWT to merge high and low frequencies
-                x = self.dwt.inverse({'low': base, 'high': x_unnorm_high})
-                if level < self.n_levels:
-                    std = mean_stds_all_levels[str(5-level)]
-                # If conditioning on target at lower levels:
-                if cond_on_target and level < 5:
-                    # Use the target's data instead of the reconstructed base if desired
-                    x = data[level - self.base_level]
-                # print('flow not none', x.shape)
-                base = x  # Update base for next iteration
-                samples.append(x)  # Append reconstruction at this level
-
-            else:
-                # If no flow at this level, just append the current base if desired
-                print('wrong place to be')
-                break
-                samples.append(base)
-        if comp == 'low':
-            return samples
-        else:
-            return samples_high_freq
 
     def sample_unnorm(self, target=None, latents=None, partial_level=-1, comp='low', cond_on_target=False, n_batch=64):
         
@@ -198,7 +125,6 @@ class WaveletFlow(nn.Module):
         final_level = self.base_level if partial_level == -1 else partial_level
         for level in range(self.base_level+1, self.n_levels+1):
             flow = self.sub_flows[level]
-            # print(std, level, self.base_level+1, self.n_levels+1)
             if flow is not None:
                 conditioning = self.conditioning_network.encoder_list[level](base)
 
@@ -214,7 +140,6 @@ class WaveletFlow(nn.Module):
                 if cond_on_target and level < 5:
                     # Use the target's data instead of the reconstructed base if desired
                     x = data[level - self.base_level]
-                # print('flow not none', x.shape)
                 base = x  # Update base for next iteration
                 samples.append(x)  # Append reconstruction at this level
 

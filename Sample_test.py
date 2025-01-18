@@ -654,7 +654,7 @@ def main():
     # Extracting the sorted list of files with maximum j for each i
     #selected files contain the file names of the models to be loaded
     selected_files = [info[0] for i, info in sorted(files_by_i.items())]
-    print('selected models ', selected_files)
+    [print(f'Using {ml_file} for level {i}\n') for i,ml_file in enumerate(selected_files)]
     print('loading normalization factors from ', cf.std_path)
     #dir to save plots
     if not os.path.exists(cf.plotSaveDir):
@@ -771,7 +771,7 @@ def main():
     device, 
     cond_on_target=False,
     n_thresholds=50,
-    max_iterations=100,
+    max_iterations=50,
 )
 
     print(time.time() - start)
