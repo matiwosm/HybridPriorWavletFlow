@@ -103,13 +103,12 @@ def compute_and_plot_minkowski_functionals_no_prior(
     iter_loader : iterator / DataLoader
         Yields batches of data for the model to process.
     cf : config object
-        (Optional) if your code needs config details. Not strictly used here.
     mean_stds_all_levels : ...
-        Stats for normalization if needed by your model.sample().
+        Stats for normalization if needed by model.sample().
     device : torch.device
         Device for PyTorch computations.
     cond_on_target : bool
-        Whether model.sample() uses cond_on_target = True/False.
+        Whether model.sample() uses cond_on_target = True/False. Only set True for debugging.
     n_thresholds : int
         Number of thresholds to sample between the global min and max of each channel.
     max_iterations : int
@@ -175,10 +174,6 @@ def compute_and_plot_minkowski_functionals_no_prior(
         thr = np.linspace(global_min[c], global_max[c], n_thresholds)
         thresholds.append(thr)
 
-    # Re-initialize or re-create the DataLoader for second pass, if needed:
-    # Example: iter_loader = reset_iter_loader_somehow(cf)
-    # If your environment doesn't allow that easily,
-    # you'll need to combine both passes into one or store all data in memory.
 
     ##########################################################################
     # 2) Second Pass: accumulate Minkowski functionals
@@ -204,10 +199,6 @@ def compute_and_plot_minkowski_functionals_no_prior(
         },
     }
     sample_count = 0
-
-    # Try re-initializing loader again for second pass
-    # iter_loader = reset_iter_loader_somehow(cf)
-    # If you can't, place the Minkowski code in the same pass where you do min/max.
 
     for i in range(max_iterations):
         try:
@@ -291,8 +282,8 @@ def compute_and_plot_minkowski_functionals_no_prior(
             ax.set_title(f"Channel={c_i}, {mf}")
             ax.legend()
         fig1.tight_layout()
-        os.makedirs("plots_mf", exist_ok=True)
-        out_path1 = os.path.join("plots_mf", f"Minkowski_Channel_{c_i}_Absolute.png")
+        os.makedirs(cf.plotSaveDir, exist_ok=True)
+        out_path1 = os.path.join(cf.plotSaveDir, f"Minkowski_Channel_{c_i}_Absolute.png")
         fig1.savefig(out_path1)
         plt.close(fig1)
 
@@ -321,25 +312,18 @@ def compute_and_plot_minkowski_functionals_no_prior(
             ax.legend()
 
         fig2.tight_layout()
-        out_path2 = os.path.join("plots_mf", f"Minkowski_Channel_{c_i}_FracDiff.png")
+        out_path2 = os.path.join(cf.plotSaveDir, f"Minkowski_Channel_{c_i}_FracDiff.png")
         fig2.savefig(out_path2)
         plt.close(fig2)
 
-    print("Minkowski functionals computed and plots saved in 'plots_mf' folder.")
+    print("Minkowski functionals computed and plots saved in " + cf.plotSaveDir + " folder.")
 
 
 ###############################################################################
 # Helper function to retrieve final maps (Target, Sample) from the model
 ###############################################################################
 def get_final_maps_from_model(model, target, mean_stds_all_levels, cf, cond_on_target=True):
-    """
-    Return final (target_map, sample_map) from the model, both shape (B, C, H, W).
-    The sample is taken from the last element of model.sample(...).
-    Adjust as needed for your actual reconstruction pipeline.
-    """
     import torch
-
-    # Target is typically your input, so let's keep it as is:
     tar_map = target
 
     # Now get the final sample from the model:
@@ -349,8 +333,6 @@ def get_final_maps_from_model(model, target, mean_stds_all_levels, cf, cond_on_t
                            n_batch=cf.sample_batch_size, 
                            cond_on_target=cond_on_target, 
                            comp='low')[-1]
-
-    # Both tar_map, samples are (B, C, H, W)
     return tar_map, samples
    
 
@@ -413,7 +395,7 @@ def compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_lev
         else:
             raise ValueError("Invalid value for 'freq'. Must be 'low' or 'high'.")
     timer = 0
-    bin_sizes_log = [2, 2, 2, 4, 5, 10, 13, 15, 17, 20]
+    bin_sizes_log = [1, 1, 2, 4, 5, 10, 13, 15, 17, 20]
     util_obj = util()
 
     accumulators = {}
@@ -429,8 +411,7 @@ def compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_lev
             print(f"Processed {i} iterations... in {timer} seconds")
 
         latents = model.sample_latents(n_batch=cf.sample_batch_size)
-        # latents = unnormalize_training(latents, mean_stds_all_levels, 2, cf.baseLevel)
-
+        
         if get_train_modes:
             start = time.time()
             samples = model.sample(mean_stds_all_levels, target=target, n_batch=cf.sample_batch_size, cond_on_target=cond_on_target, comp='high')
@@ -640,49 +621,6 @@ def get_sample_modes(x, model, nLevels, BaseLevel):
     mode_list.reverse()
     return mode_list
 
-def normalize_training(data, stds, comps, baselevel, nLevel):
-    for i in range(len(data)):
-        if data[i].shape[1] == comps:
-            freq_type = 'low'
-        elif data[i].shape[1]*3 > comps:
-            freq_type = 'high'
-        log2_x = int(np.log2(data[i].shape[-1]))
-        data[i] = normalize_dwt_components(data[i], stds[str(nLevel - 1 - log2_x)], freq_type)
-    return data
-
-def unnormalize_training(data, stds, comps, baselevel, nLevel):
-    for i in range(baselevel, len(data)):
-        if data[i].shape[1] == comps:
-            freq_type = 'low'
-        elif data[i].shape[1]*3 > comps:
-            freq_type = 'high'
-        log2_x = int(np.log2(data[i].shape[-1]))
-        if data[i] is not None:
-            data[i] = unnormalize_dwt_components(data[i], stds[str(nLevel - 1 -log2_x)], freq_type)
-        else:
-            data[i] = None
-    return data
-
-def normalize_samples(data, stds):
-    for j in range(0, len(data)):
-        data[j] = data[j]/stds[j+1][0]
-    return data
-
-def set_weights_to_zero(model):
-    # Recursively set all Conv2d layer weights to zero
-        for module in model.modules():
-            if isinstance(module, torch.nn.Conv2d):
-                torch.nn.init.constant_(module.weight, 0)
-                if module.bias is not None:
-                    torch.nn.init.constant_(module.bias, 0)
-            elif isinstance(module, torch.nn.ConvTranspose2d):
-                torch.nn.init.constant_(module.weight, 0)
-                if module.bias is not None:
-                    torch.nn.init.constant_(module.bias, 0)
-            elif isinstance(module, torch.nn.Linear):
-                torch.nn.init.constant_(module.weight, 0)
-                if module.bias is not None:
-                    torch.nn.init.constant_(module.bias, 0)
 
 def main():
 
@@ -696,6 +634,8 @@ def main():
     # Read all file names from the directory
     file_list = os.listdir(directory_path)
 
+    #This part of the code will automatically find the latest saved model in directory path
+    #it will not work if you change the naming conventions of the saved model
     # Regular expression to extract i and j values
     pattern = re.compile(r"waveletflow-agora-(\d+)(?:-(\d+))?")
 
@@ -714,8 +654,8 @@ def main():
     # Extracting the sorted list of files with maximum j for each i
     #selected files contain the file names of the models to be loaded
     selected_files = [info[0] for i, info in sorted(files_by_i.items())]
-    print(selected_files)
-   
+    print('selected models ', selected_files)
+    print('loading normalization factors from ', cf.std_path)
     #dir to save plots
     if not os.path.exists(cf.plotSaveDir):
             os.makedirs(cf.plotSaveDir)
@@ -723,7 +663,7 @@ def main():
     prior_type = cf.priorType
     for i in range(p.baseLevel, cf.nLevels+1):
         p_level = i
-        print('loading stds from ', cf.std_path)
+        
         with open(cf.std_path, 'r') as f:
             mean_stds_all_levels = json.load(f)
 
@@ -767,19 +707,21 @@ def main():
             priortype = 'WN'
             shape = (N*cf.imShape[0], nx, nx)
             prior = corr_prior.SimpleNormal(torch.zeros(shape).to(device), torch.ones(shape).to(device))
-        print('p_level', p_level, ' nx ', nx, ' dwt_level_number ', dwt_level_number, freq, N, priortype)
+        
+        p.net_type = p.network[i]
+        # print('p_level', p_level, ' nx ', nx, ' dwt_level_number ', dwt_level_number, freq, N, priortype)
 
         #load the models for all levels
         if i == p.baseLevel:
             model = WaveletFlow(cf=p, cond_net=Conditioning_network(), partial_level=i, prior=prior, stds=mean_stds_this_levels, priortype=priortype)
             model.load_state_dict(torch.load(directory_path + selected_files[i - p.baseLevel], weights_only=True))
             total_params = sum(p.numel() for p in model.parameters())
-            print(f"Total number of parameters: {total_params}")
+            print(f"Total number of parameters for level {p_level}: {total_params}")
         else:
             model1 = WaveletFlow(cf=p, cond_net=Conditioning_network(), partial_level=i, prior=prior, stds=mean_stds_this_levels, priortype=priortype)
             model1.load_state_dict(torch.load(directory_path + selected_files[i - p.baseLevel], weights_only=True))
             total_params = sum(p.numel() for p in model1.parameters())
-            print(f"Total number of parameters: {total_params}")
+            print(f"Total number of parameters for level {p_level}: {total_params}")
             model.sub_flows[i] = model1.sub_flows[i]
             del model1
         
@@ -810,15 +752,15 @@ def main():
     loader = DataLoader(dataset, batch_size=cf.sample_batch_size, shuffle=True, pin_memory=True)
     iter_loader = iter(loader)
 
-    print(len(loader))
 
     total_params = sum(p.numel() for p in model.parameters())
-    print(f"Total number of parameters: {total_params}")
+    print(f"Total number of parameters for all levels: {total_params}")
 
     #calculate and plot power spectra and minkowski functionals
+    #caution: cond_on_target should be False for proper results. Set to True only for debuging.
     start = time.time()
     compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=False, cond_on_target=False, max_iterations=100)
-    compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=True, cond_on_target=False, max_iterations=100)
+    # compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=True, cond_on_target=False, max_iterations=2)
 
 
     compute_and_plot_minkowski_functionals_no_prior(

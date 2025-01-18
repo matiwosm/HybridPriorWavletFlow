@@ -114,12 +114,12 @@ class CorrelatedNormalDWTGeneral:
         for j in range(H):
             for k in range(W):
                 self.inv_cov[:, :, j, k] = torch.linalg.inv(self.cov[:, :, j, k])
-                self.det[j, k] = torch.linalg.det(self.cov[:, :, j, k])
+                self.det[j, k] = torch.linalg.det(self.cov[:, :, j, k].real)
         
         # Cholesky / sqrt factor
         self.clfactor = np.copy(self.cov.cpu().numpy())
         self.clfactor = self._cholesky(self.clfactor)
-        self.clfactor = torch.from_numpy(self.clfactor).float().to(torch_device)
+        self.clfactor = torch.from_numpy(self.clfactor.real).float().to(torch_device)
         
         # Prepare masks for RFFT symmetries
         a_mask, b_mask = self._create_rfft_masks(nx)
@@ -136,10 +136,12 @@ class CorrelatedNormalDWTGeneral:
             torch.zeros(2), torch.eye(2)
         ).expand((b_nr,))
         
-        print('estimating fudge factor')
-        s = self.sample_n(3)
-        for i in range(s.shape[1]):
-            print(f'std channel {i}:', torch.std(s[:, i, :, :]))
+        # print('estimating fudge factor')
+        # s = self.sample_n(3)
+        # for i in range(s.shape[1]):
+        #     print(f'std channel {i}:', torch.std(s[:, i, :, :]))
+        #     print(f'max channel {i}:', torch.max(s[:, i, :, :]))
+        #     print(f'min channel {i}:', torch.min(s[:, i, :, :]))
 
     def get_spectrum_by_name(self, name):
         """
@@ -259,7 +261,8 @@ class CorrelatedNormalDWTGeneral:
             if self.freq == 'low':
                 for ch in range(self.n_channels):
                     std = self.norm_std['low']['mean_std'][ch]
-                    fft1[:, ch, :, :]  = fft1[:, ch, :, :]/ std
+                    # min_max = max(-1*self.norm_std['low']['min'][ch], self.norm_std['low']['max'][ch])
+                    fft1[:, ch, :, :]  = (fft1[:, ch, :, :]/ std) #* min_max
             if self.freq == 'high':
                 n_high_types = 3
                 high_types = ['high_horizontal', 'high_vertical', 'high_diagonal']
@@ -267,7 +270,8 @@ class CorrelatedNormalDWTGeneral:
                     for ht_idx, ht in enumerate(high_types):
                         idx = ch * n_high_types + ht_idx
                         std = self.norm_std[ht]['mean_std'][ch]
-                        fft1[:, idx, :, :] = fft1[:, idx, :, :]/ std
+                        # min_max = max(-1*self.norm_std[ht]['min'][ch], self.norm_std[ht]['max'][ch])
+                        fft1[:, idx, :, :] = (fft1[:, idx, :, :]/ std) #* min_max
 
         
         x = torch.view_as_real(fft1)
@@ -277,7 +281,7 @@ class CorrelatedNormalDWTGeneral:
         b = x[:, :, :, :, 1]
         
  
-        clinvfactor = self.inv_cov.type(torch.float64)
+        clinvfactor = self.inv_cov.type(x.dtype)
         logp_real = (-1/2)*torch.einsum('kplm,kplm->klm', torch.einsum('nplm,pklm->nklm', x[:, :, :, :, 0], clinvfactor), (x[:, :, :, :, 0])) 
         
         logp_imaj = (-1/2)*torch.einsum('kplm,kplm->klm', torch.einsum('nplm,pklm->nklm', x[:, :, :, :, 1], clinvfactor), (x[:, :, :, :, 1]))
@@ -329,7 +333,9 @@ class CorrelatedNormalDWTGeneral:
             if self.freq == 'low':
                 for ch in range(self.n_channels):
                     std = self.norm_std['low']['mean_std'][ch]
-                    rmap[:, ch, :, :]  = rmap[:, ch, :, :] * std
+                    # min_max = max(-1*self.norm_std['low']['min'][ch], self.norm_std['low']['max'][ch])
+                    rmap[:, ch, :, :]  = (rmap[:, ch, :, :] * std) #/min_max
+
             if self.freq == 'high':
                 n_high_types = 3
                 high_types = ['high_horizontal', 'high_vertical', 'high_diagonal']
@@ -337,7 +343,8 @@ class CorrelatedNormalDWTGeneral:
                     for ht_idx, ht in enumerate(high_types):
                         idx = ch * n_high_types + ht_idx
                         std = self.norm_std[ht]['mean_std'][ch]
-                        rmap[:, idx, :, :] = rmap[:, idx, :, :] * std
+                        # min_max = max(-1*self.norm_std[ht]['min'][ch], self.norm_std[ht]['max'][ch])
+                        rmap[:, idx, :, :] = (rmap[:, idx, :, :] * std) #/min_max
 
         #https://pytorch.org/docs/1.7.1/fft.html#torch.fft.irfftn
         return rmap

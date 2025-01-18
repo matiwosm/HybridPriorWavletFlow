@@ -292,7 +292,7 @@ class InvertibleConv1x1(nn.Module):
         if not LU_decomposed:
             self.weight = nn.Parameter(torch.Tensor(w_init))
         else:
-            p, lower, upper = torch.lu_unpack(*torch.lu(w_init))
+            p, lower, upper = torch.lu_unpack(*torch.linalg.lu_factor(w_init))
             s = torch.diag(upper)
             sign_s = torch.sign(s)
             log_s = torch.log(torch.abs(s))

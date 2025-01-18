@@ -25,7 +25,7 @@ import json
 from quantimpy import minkowski
 plt.style.use('ggplot')
 
-def plot_power(iter_loader, samples_dataloader, prior, step, savedir, batch_size, batch_num):
+def plot_power(iter_loader, samples_dataloader, prior, step, cf, batch_num):
     """
     Plots the power spectrum and fractional differences for target, sample, and prior data.
 
@@ -34,24 +34,19 @@ def plot_power(iter_loader, samples_dataloader, prior, step, savedir, batch_size
     - sample: object with method sample_n(batch_size)
     - prior: object with method sample_n(batch_size)
     - step: int, current step or epoch
-    - savedir: str, directory to save plots
-    - batch_size: int, number of samples per batch
+    - cf: object, configuration file
     - n_samples: int, total number of samples to process
     """
     import matplotlib.pyplot as plt
-
+    savedir = cf.plotSaveDir
+    batch_size = cf.sample_batch_size
     dx = (0.5 / 60.) * (np.pi / 180.)  # Pixel size
 
     target = next(iter_loader).cpu().numpy()
     # Get the shape information
     sample_shape = target.shape  # Assuming shape (B, C, H, W)
     C = sample_shape[1]
-    if C == 2:
-        comps = ['kap', 'cib']
-    elif C == 3:
-        comps = ['kap', 'tsz', 'cib']
-    else:
-        comps = ['kap', 'ksz', 'tsz', 'cib', 'radio']
+    comps = cf.channels_to_get
 
     nx = sample_shape[2]
 
@@ -157,7 +152,7 @@ def plot_power(iter_loader, samples_dataloader, prior, step, savedir, batch_size
 
     for j in range(C):
         for k in range(C):
-            # We only plot for j >= k (as per your condition)
+            # We only plot for j >= k to avoid redundancy
             if j >= k:
                 # ---------- Compute fractional difference ----------
                 y = (mean_spectrum_sample[j, k, :] - mean_spectrum_target[j, k, :]) / mean_spectrum_target[j, k, :]
@@ -211,9 +206,10 @@ def plot_power(iter_loader, samples_dataloader, prior, step, savedir, batch_size
     fig_pow.savefig(pow_path)
     plt.close(fig_pow)
 
-config_file = 'configs/HCC_prior_best_model_256x256_all_levels.py'
+config_file = 'configs/example_config_hcc_prior_rqs_tsz_only.py'
 cf = SourceFileLoader('cf', config_file).load_module()
-
+cf.channels_to_get = ['kappa', 'tsz']
+# cf.noise_dict['tsz'] = [15.0, 21600]
 bdir = cf.val_dataset_path
 file = "data.mdb"
 
@@ -225,19 +221,13 @@ dataset = My_lmdb(
     num_classes=1,
     class_cond=False,
     channels_to_use=cf.channels_to_get,
-    noise_dict=cf.noise_dict,        # noise only these channels
+    noise_dict={},        # noise only these channels
     apply_scaling=True,           # do the scaling
     data_shape=cf.data_shape       
 )
 
 loader_unnoised = DataLoader(dataset, batch_size=cf.sample_batch_size, shuffle=True, pin_memory=True)
 iter_unnoised = iter(loader_unnoised)
-
-config_file = 'configs/HCC_prior_best_model_256x256_all_levels_kap_noise_0.01.py'
-cf = SourceFileLoader('cf', config_file).load_module()
-
-bdir = cf.val_dataset_path
-file = "data.mdb"
 
 # Create the dataset
 dataset = My_lmdb(
@@ -257,4 +247,4 @@ iter_noised = iter(loader_noised)
 #dir to save plots
 if not os.path.exists(cf.plotSaveDir):
     os.makedirs(cf.plotSaveDir)
-plot_power(iter_unnoised, iter_noised, None, 10, cf.plotSaveDir, cf.sample_batch_size, 100)
+plot_power(iter_unnoised, iter_noised, None, 10, cf, 100)

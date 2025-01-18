@@ -1,7 +1,6 @@
 model = "waveletflow"
 stepsPerResolution = [2, 2, 4, 8, 16, 16, 16, 16, 16, 16, 16]
 stepsPerResolution_L = [3] * 8
-normalize = [False] * 10
 nLevels = 8
 kernel = 3
 baseLevel = 1
@@ -12,6 +11,7 @@ actNormScale = 1.0
 imShape = [2, 256, 256]
 perm = "invconv"
 coupling = "checker"
+network = ['ConvNet'] * 10
 y_classes = None
 y_learn_top = False
 y_condition = False
@@ -28,12 +28,14 @@ unnormalize_prior = False
 dataset = 'My_lmdb'   #replace with 'My_lmdb' with your dataset
 channels_to_get = ['kappa', 'cib']
 noise_dict = {
-    'kappa': 0.025
+    'kappa': [0.025, None]
 }
 data_shape = (5, 256, 256)   #this is the shape of the data in the dataset
 dataset_path = '/sdf/group/kipac/users/mati/yukki_sim_train_256x256/'
 val_dataset_path = '/sdf/group/kipac/users/mati/yukki_sim_train_256x256/'
 sample_batch_size = 128
+normalize = [False] * 10
+norm_type = ['min_max']*10
 
 #powerspectra and normalization
 std_path = 'norm_stds/256x256_final_mean_stats_all_levels_noise_0.025.json'

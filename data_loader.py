@@ -123,21 +123,83 @@ class My_lmdb(Dataset):
         final_data = lmdb_data[self.channel_indices, :, :]
         
         return final_data
+
+    import numpy as np
+
+    def _apply_noise(self, data, dx=0.5, do_scaling=True):
+        """
+        Apply noise to the specified channels only after a certain frequency threshold (ell).
+        - threshold_ell: The frequency (in cycles/pixel or similar units) after which
+        noise should be added.
+        """
+        data = np.copy(data)  # So we don't modify in-place accidentally
+        dx = (dx/60. * np.pi/180.) #arc_min to rad
+        # Loop over each channel where noise needs to be added
+        for ch_name, noise_params in self.noise_dict.items():
+            noise_std = noise_params[0]
+            threshold_ell = noise_params[1]
+            ch_idx = self.CHANNEL_MAP[ch_name]
+            
+            if threshold_ell is not None:
+                if ch_idx < data.shape[0]:
+                    # Extract the 2D slice for this channel
+                    channel_data = data[ch_idx, :, :]
+                    
+                    # 1) Forward FFT: convert spatial domain -> frequency domain
+                    channel_fft = np.fft.fft2(channel_data)
+                    
+                    # 2) Build frequency grid
+                    ny, nx = channel_data.shape
+                    freq_y = np.fft.fftfreq(ny, dx)*2.*np.pi   # Frequencies along y-dimension
+                    freq_x = np.fft.fftfreq(nx, dx)*2.*np.pi   # Frequencies along x-dimension
+                    
+                    # Create 2D frequency arrays using meshgrid
+                    freq2d_x, freq2d_y = np.meshgrid(freq_x, freq_y)
+                    # Magnitude of frequency
+                    freq_magnitude = np.sqrt(freq2d_x**2 + freq2d_y**2)
+                    # print('in apply noise ', np.max(freq_y), np.max(freq_x), np.max(freq_magnitude), threshold_ell)
+                    # 3) Create a mask where freq_magnitude > threshold_ell
+                    mask = (freq_magnitude > threshold_ell)
+                    # print(mask, np.sum(mask))
+                    # 4) Generate noise in the frequency domain
+                    #    - Because the FFT of real data is symmetric in frequency space,
+                    #      normally you'd want to ensure your noise is Hermitian-symmetric
+                    #      if you want the inverse transform to remain real. However, a simple
+                    #      approach is to generate complex noise for the entire frequency plane
+                    #      and then rely on the inverse transform. (This may slightly break
+                    #      real-valued symmetry, but often is acceptable if you're just injecting
+                    #      “randomness” for simulation.)
+                    
+                    # Generate complex Gaussian noise
+                    noise_real = np.random.normal(loc=0.0, scale=noise_std, size=channel_fft.shape)
+                    noise_imag = np.random.normal(loc=0.0, scale=noise_std, size=channel_fft.shape)
+                    noise_complex = noise_real + 1j * noise_imag
+                    
+                    # Apply mask so that noise is only added above threshold_ell
+                    noise_fft = noise_complex * mask
+                    
+                    # 5) Add noise to the channel in the frequency domain
+                    channel_fft_noisy = channel_fft + noise_fft
+                    
+                    # 6) Inverse FFT: frequency domain -> spatial domain
+                    channel_noisy = np.fft.ifft2(channel_fft_noisy)
+                    
+                    # 7) Because the original data are presumably real,
+                    #    take the real part (imaginary parts should be small if done carefully)
+                    data[ch_idx, :, :] = np.real(channel_noisy)
+            else:
+                if ch_idx < data.shape[0]:
+                    data[ch_idx, :, :] = self._apply_white_noise(data[ch_idx, :, :], noise_std)
+
+        
+        return data
+
     
-    def _apply_noise(self, data, do_scaling=True):
-        """
-        Apply noise to the specified channels. 
-        If 'channel_name' is in self.noise_dict, add Gaussian noise with that std.
-        """
+    def _apply_white_noise(self, data, noise_std, do_scaling=True):
         data = np.copy(data)  # so we don't modify in-place accidentally
         
-        for ch_name, noise_std in self.noise_dict.items():
-            ch_idx = self.CHANNEL_MAP[ch_name]
-            # Add noise only if that channel is within the data's shape
-            if ch_idx < data.shape[0]:
-                noise = np.random.normal(loc=0.0, scale=noise_std, size=data[ch_idx, :, :].shape)
-                data[ch_idx, :, :] += noise
-        
+        noise = np.random.normal(loc=0.0, scale=noise_std, size=data.shape)
+        data += noise
         return data
 
     def _apply_scaling(self, images):

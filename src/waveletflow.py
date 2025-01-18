@@ -12,19 +12,20 @@ class WaveletFlow(nn.Module):
         super().__init__()
         self.n_levels = cf.nLevels
         self.base_level = cf.baseLevel
-        self.normalize = cf.normalize[partial_level]
         self.partial_level = partial_level
         self.wavelet = Haar()
         self.dwt = Dwt(wavelet=self.wavelet)
         self.conditioning_network = cond_net
         self.stds = stds #perlevel for training
+        self.normalize = cf.normalize[partial_level]
+        self.normalization_type = cf.norm_type[partial_level]
         self.prior_type = priortype
         if partial_level == -1 or partial_level == self.base_level:
             base_size = 2 ** self.base_level
             cf.K = cf.stepsPerResolution[partial_level - 1]
             cf.L = cf.stepsPerResolution_L[partial_level - 1]
             shape = (cf.imShape[0], base_size, base_size)
-            self.base_flow = Glow(cf, shape, False, prior, self.prior_type)
+            self.base_flow = Glow(cf, shape, False, prior, self.prior_type, self.normalize, self.stds, self.normalization_type)
         else:
             self.base_flow = None
         
@@ -40,7 +41,7 @@ class WaveletFlow(nn.Module):
                 cf.K = cf.stepsPerResolution[level-1]
                 cf.L = cf.stepsPerResolution_L[level-1]
                 shape = (cf.imShape[0] * 3, h, w)
-                self.sub_flows.append(Glow(cf, shape, cf.conditional, prior, self.prior_type))
+                self.sub_flows.append(Glow(cf, shape, cf.conditional, prior, self.prior_type, self.normalize, self.stds, self.normalization_type))
         self.sub_flows = nn.ModuleList(self.sub_flows)
 
     def forward(self, x, std=None, partial_level=-1):
@@ -54,20 +55,13 @@ class WaveletFlow(nn.Module):
                     conditioning = None
                     # self.stds = std[str(5 - int(np.log2(dwt_components['low'].shape[-1])))]
                     low_freq = dwt_components['low']
-                    if self.normalize:
-                        low_freq = normalize_dwt_components(low_freq, self.stds, 'low')
                     res = flow.forward(low_freq, conditioning=conditioning)
                 else:
                     dwt_components = self.dwt.forward(low_freq)
                     low_freq = dwt_components['low']
-                    # self.stds = std[str(5 - int(np.log2(dwt_components['low'].shape[-1])))]
-                    if self.normalize:
-                        low_freq = normalize_dwt_components(low_freq, self.stds, 'low')
                     conditioning = self.conditioning_network.encoder_list[level](low_freq)
                     flow = self.sub_flows[level]
                     high_freq = dwt_components['high']
-                    if self.normalize:
-                        high_freq = normalize_dwt_components(high_freq, self.stds, 'high')
                     res = flow.forward(high_freq, conditioning=conditioning)
                 latents.append(res["latent"])
                 b, c, h, w = low_freq.shape
@@ -97,10 +91,7 @@ class WaveletFlow(nn.Module):
         return latents
     
     def sample(self, mean_stds_all_levels, target=None, latents=None, partial_level=-1, comp='low', cond_on_target=False, n_batch=64):
-        if self.normalize:
-            return self.sample_norm(mean_stds_all_levels, target, latents, partial_level, comp, cond_on_target, n_batch)
-        else:
-            return self.sample_unnorm(target, latents, partial_level, comp, cond_on_target, n_batch)
+        return self.sample_unnorm(target, latents, partial_level, comp, cond_on_target, n_batch)
         
     def sample_norm(self, mean_stds_all_levels, target=None, latents=None, partial_level=-1, comp='low', cond_on_target=False, n_batch=64):
         
@@ -200,7 +191,6 @@ class WaveletFlow(nn.Module):
         if cond_on_target:
             # If conditioning on target, overwrite base_norm with normalized target low band
             base = data[0]
-
         samples.append(base)  # Append the base level reconstruction
         samples_high_freq.append(base)
 
@@ -233,11 +223,6 @@ class WaveletFlow(nn.Module):
                 print('wrong place to be')
                 break
                 samples.append(base)
-        # for i in range(len(samples)):
-        #     print(samples[i].shape)
-
-        # for i in range(len(samples_high_freq)):
-        #     print(samples_high_freq[i].shape)
         if comp == 'low':
             return samples
         else:

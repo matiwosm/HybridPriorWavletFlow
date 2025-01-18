@@ -30,11 +30,15 @@ class FlowStep(nn.Module):
 
         # 3. coupling
         if params.coupling == 'affine':
-            print('unsing affine')
             self.coupling = Affine(C, C, hidden_channels, conditional)
         elif params.coupling == 'checker':
-            print('using checker')
-            self.coupling = MyCheckerboard(C, C, H, W, hidden_channels, idx%2, conditional)
+            self.coupling = MyCheckerboard(C, C, H, W, hidden_channels, idx%2, conditional, params.net_type)
+        elif params.coupling == 'rqs':
+            self.coupling = MyCheckerboardRQS(C, C, H, W, hidden_channels, idx%2, conditional, params.net_type)
+        elif params.coupling == 'rqs_per_c':
+            self.coupling = MyCheckerboardRQS_per_channel(C, C, H, W, hidden_channels, idx%2, conditional, params.net_type)
+        elif params.coupling == 'fully_active_rqs':
+            self.coupling = MyFullyActiveRQS(C, C, H, W, hidden_channels, conditional, params.net_type)
         elif params.coupling == 'checker3d':
             self.coupling = Checkerboard3D(C, C, H, W, hidden_channels, conditional)
         elif params.coupling == 'cycle':
@@ -51,7 +55,6 @@ class FlowStep(nn.Module):
             return self.reverse_flow(input, conditioning, logdet)
 
     def normal_flow(self, input, conditioning, logdet):
-        # z = input
         # 1. actnorm
         z, logdet = self.actnorm(input, logdet=logdet)
         # 2. permute
@@ -156,7 +159,7 @@ class FlowNet(nn.Module):
         return z, logdet
 
 class Glow(nn.Module):
-    def __init__(self, params, shape, conditional, corr_prior, priortype):
+    def __init__(self, params, shape, conditional, corr_prior, priortype, normalize=False, norm_constants=None, normalization_type='min_max'):
         super().__init__()
         self.flow = FlowNet(params, shape, conditional)
         self.y_classes = params.y_classes
@@ -164,7 +167,10 @@ class Glow(nn.Module):
         self.learn_top = params.y_learn_top
         self.prior_dist = corr_prior
         self.prior_type = priortype
-        print('In Glow ', self.prior_type, self.prior_dist)
+        self.normalize = normalize
+        self.norm_constants = norm_constants
+        self.normalization_type = normalization_type
+        print('Initilizing Glow Using ', self.prior_type, "prior")
         # learned prior
         if self.learn_top:
             C = self.flow.output_shapes[-1][1]
@@ -203,7 +209,144 @@ class Glow(nn.Module):
             h += yp.view(h.shape[0], channels, 1, 1)
         return split_feature(h, "split")
 
+    def apply_normalization_for_training(self, x, conditioning, norm_constants, normalization_type):
+        """
+        Normalizes x and/or the conditioning. 
+        If conditioning is not None, it is treated as the low-frequency component (low_freq_x),
+        and x contains the high-frequency components that also need normalization.
+        If conditioning is None, x is assumed to be low-frequency data only.
+        """
+
+        # Decide which data is considered "low-frequency"
+        if conditioning is not None:
+            low_freq_x = conditioning
+        else:
+            low_freq_x = x
+
+        # 1) Normalize low-frequency components
+        normalized_low_freq = torch.empty_like(low_freq_x)
+        N_channels = low_freq_x.shape[1]
+        for ch in range(N_channels):
+            if normalization_type == 'min_max':
+                const = max(
+                    -1 * norm_constants['low']['min'][ch],
+                    norm_constants['low']['max'][ch]
+                )
+            elif normalization_type == 'std':
+                const = norm_constants['low']['mean_std'][ch]
+            else:
+                raise ValueError("normalization_type must be 'min_max' or 'std'.")
+
+            normalized_low_freq[:, ch, :, :] = low_freq_x[:, ch, :, :] / const
+
+        # 2) If we have conditioning, then x is actually the high-frequency part
+        if conditioning is not None:
+            N_channels = x.shape[1] // 3
+            n_high_types = 3  # e.g. ['high_horizontal', 'high_vertical', 'high_diagonal']
+            high_types = ['high_horizontal', 'high_vertical', 'high_diagonal']
+            normalized_high_freq = torch.empty_like(x)
+            for ch in range(N_channels):
+                for ht_idx, ht in enumerate(high_types):
+                    idx = ch * n_high_types + ht_idx
+                    if normalization_type == 'min_max':
+                        const = max(
+                            -1 * norm_constants[ht]['min'][ch],
+                            norm_constants[ht]['max'][ch]
+                        )
+                    elif normalization_type == 'std':
+                        const = norm_constants[ht]['mean_std'][ch]
+                    else:
+                        raise ValueError("normalization_type must be 'min_max' or 'std'.")
+
+                    normalized_high_freq[:, idx, :, :] = x[:, idx, :, :] / const
+
+            # Return (high-frequency, low-frequency) if conditioning was given
+            return normalized_high_freq, normalized_low_freq
+        else:
+            # Return (low-frequency, None) if conditioning was None
+            return normalized_low_freq, conditioning
+
+
+    def apply_normalization_before_sampling(self, conditioning, norm_constants, normalization_type):
+        """
+        Normalizes the conditioning before sampling if it is not None.
+        This is typically the low-frequency component.
+        """
+
+        if conditioning is not None:
+            # Low-frequency components
+            N_channels = conditioning.shape[1]
+            normalized_data = torch.empty_like(conditioning)
+            for ch in range(N_channels):
+                if normalization_type == 'min_max':
+                    const = max(
+                        -1 * norm_constants['low']['min'][ch],
+                        norm_constants['low']['max'][ch]
+                    )
+                elif normalization_type == 'std':
+                    const = norm_constants['low']['mean_std'][ch]
+                else:
+                    raise ValueError("normalization_type must be 'min_max' or 'std'.")
+
+                normalized_data[:, ch, :, :] = conditioning[:, ch, :, :] / const
+
+            return normalized_data
+        else:
+            return conditioning
+
+
+    def unnormalization_after_sampling(self, x, conditioning, norm_constants, normalization_type):
+        """
+        Unnormalizes the sampled x. 
+        If conditioning is None, then x is assumed to be the low-frequency component.
+        Otherwise, x is the high-frequency component.
+        """
+
+        if conditioning is None:
+            # Unnormalize low-frequency component
+            N_channels = x.shape[1]
+            unnormalized_data = torch.empty_like(x)
+            for ch in range(N_channels):
+                if normalization_type == 'min_max':
+                    const = max(
+                        -1 * norm_constants['low']['min'][ch],
+                        norm_constants['low']['max'][ch]
+                    )
+                elif normalization_type == 'std':
+                    const = norm_constants['low']['mean_std'][ch]
+                else:
+                    raise ValueError("normalization_type must be 'min_max' or 'std'.")
+
+                unnormalized_data[:, ch, :, :] = x[:, ch, :, :] * const
+
+        else:
+            # Unnormalize high-frequency components
+            N_channels = x.shape[1] // 3
+            n_high_types = 3  # ['high_horizontal', 'high_vertical', 'high_diagonal']
+            high_types = ['high_horizontal', 'high_vertical', 'high_diagonal']
+            unnormalized_data = torch.empty_like(x)
+            for ch in range(N_channels):
+                for ht_idx, ht in enumerate(high_types):
+                    idx = ch * n_high_types + ht_idx
+                    if normalization_type == 'min_max':
+                        const = max(
+                            -1 * norm_constants[ht]['min'][ch],
+                            norm_constants[ht]['max'][ch]
+                        )
+                    elif normalization_type == 'std':
+                        const = norm_constants[ht]['mean_std'][ch]
+                    else:
+                        raise ValueError("normalization_type must be 'min_max' or 'std'.")
+
+                    unnormalized_data[:, idx, :, :] = x[:, idx, :, :] * const
+
+        return unnormalized_data
+
+
     def normal_flow(self, x, conditioning, y_onehot):
+        if self.normalize:
+            x, conditioning = self.apply_normalization_for_training(x, conditioning, self.norm_constants, self.normalization_type)
+
         b, c, h, w = x.shape
 
         # x, logdet = uniform_binning_correction(x)
@@ -221,16 +364,26 @@ class Glow(nn.Module):
         return {"latent": z, "likelihood": bpd, "y_logits": y_logits}
 
     def reverse_flow(self, z, n_batch, conditioning, y_onehot, temperature):
+        # unnormalized_conditioning = conditioning
+        if self.normalize:
+            conditioning = self.apply_normalization_before_sampling(conditioning, self.norm_constants, self.normalization_type)
+
         with torch.no_grad():
             if z is None:
                 z = self.prior_dist.sample_n(n_batch).type(torch.float64)
             logdet = torch.zeros(z.shape[0]).to(z.device)
             x, logdet = self.flow(z, conditioning, logdet=logdet, temperature=temperature, reverse=True)
-            # z1, obj = self.flow(x, conditioning, logdet=logdet, temperature=temperature)
-            # print('x = ', x[0])
-            # print('z = ', z[0])
+            if self.normalize:
+                x = self.unnormalization_after_sampling(x, conditioning, self.norm_constants, self.normalization_type)
+
+            # z1, obj = self.flow(x, unnormalized_conditioning, logdet=logdet, temperature=temperature)
+            # if self.normalize:
+            #     z1 = self.unnormalization_after_sampling(z1, conditioning, self.norm_constants, self.normalization_type)
+            #     print('unnormalizing', z1.shape)
+            # print('x = ', x.shape)
+            # print(unnormalized_conditioning.shape if unnormalized_conditioning is not None else unnormalized_conditioning)
             # print('z, z1, reverseflow', torch.allclose(z1, z, atol=1e-5))
-        # print('end of reverse flow')
+            # print('end of reverse flow')
         return x, logdet
     
     def sample_latents(self, n_batch=64,temperature=1.0):

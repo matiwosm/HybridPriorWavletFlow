@@ -1,15 +1,15 @@
 #!/bin/bash
 
-#SBATCH --partition=ampere
-#SBATCH --job-name=HCC_256x256_kappa_0.01%a
-#SBATCH --output=logs/HCC_256x256_kappa_0.01%a_log.txt
-#SBATCH --error=logs/HCC_256x256_kappa_0.01%a_error.txt
-#SBATCH --account=mli:cmb-ml
+#SBATCH --partition=ada
+#SBATCH --job-name=nyq_kappa_noise%a
+#SBATCH --output=logs/nyquest_noise_kappa_cib%a_log.txt
+#SBATCH --error=logs/nyquest_noise_kappa_cib%a_error.txt
+#SBATCH --account=kipac
 #SBATCH --ntasks=1
-#SBATCH --time=3-23:59:59
+#SBATCH --time=4-23:59:59
 #SBATCH --gpus=1
 #SBATCH --mem=100G
-#SBATCH --array=5-8
+#SBATCH --array=1-4
 
 # The array will spawn four separate jobs with SLURM_ARRAY_TASK_ID = 1,2,3,4
 # Each job will pick a different level based on $SLURM_ARRAY_TASK_ID.
@@ -22,6 +22,6 @@ echo "CUDA_VISIBLE_DEVICES set to: $CUDA_VISIBLE_DEVICES"
 echo "Training level: $SLURM_ARRAY_TASK_ID"
 
 # Run the training command, using the array task ID as the level
-python train.py --level $SLURM_ARRAY_TASK_ID --config configs/HCC_prior_best_model_256x256_all_levels_kap_noise_0.01.py
+python train.py --level $SLURM_ARRAY_TASK_ID --config configs/kappa_cib_hcc_prior_noised_kappa_nyquest_noise.py
 
 wait

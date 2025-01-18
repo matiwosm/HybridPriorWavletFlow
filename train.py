@@ -31,8 +31,8 @@ torch.manual_seed(seed)
 torch.cuda.manual_seed(seed)
 torch.cuda.manual_seed_all(seed)
 torch.backends.cudnn.benchmark = False
-torch.backends.cudnn.deterministic = True
-torch.use_deterministic_algorithms(True)
+# torch.backends.cudnn.deterministic = True
+# torch.use_deterministic_algorithms(True)
 device = torch.device("cuda")
 
 print("Visible devices:", torch.cuda.device_count())
@@ -47,6 +47,8 @@ torch.cuda.empty_cache()
 def main():
     cf = SourceFileLoader('cf', f'{args.data}.py').load_module()
     p = SourceFileLoader('cf', f'{args.config}').load_module()
+    if not cf.double_precision[args.level]:
+        torch.set_default_dtype(torch.float32)
     
     #set this true to resume training
     resume = False
@@ -158,7 +160,7 @@ def main():
         prior_type = 'WN'
         shape = (cf.batch_size[args.level], N*cf.imShape[0], nx, nx)
         prior = corr_prior.SimpleNormal(torch.zeros(shape).to(device), torch.ones(shape).to(device))
-        
+    p.net_type = cf.network[p_level]    
     model = WaveletFlow(cf=p, cond_net=Conditioning_network(), partial_level=p_level, prior=prior, stds=mean_stds_all_levels, priortype=prior_type).to(device)
     print('Prior type = ', prior_type)
     print('norm_std = ', norm_std)
@@ -167,6 +169,7 @@ def main():
         print('loaded ', directory_path + selected_files[p_level-1], selected_files[p_level-1][19:-8])
     optimizer = optim.Adam(model.parameters(), lr=cf.lr, weight_decay=cf.weight_decay)
     
+    print(model)
     lowest = 1e7
     patience = 0
     total_params = sum(p.numel() for p in model.parameters())
@@ -179,20 +182,26 @@ def main():
 
 
     elapsed_time = 0
+    elapsed_time_without_data_loader = 0
     start_time = time.time()
     
     while True:
         ep_loss = []
 
         for idx, x in enumerate(loader):
+            torch.cuda.synchronize()
+            elapsed_time += time.time() - start_time
             if ((idx) % 100) == 0:
-                torch.cuda.synchronize()
-                elapsed_time = time.time() - start_time
-                print(f"Epoch: {ep} Level: {p_level}  Progress:      {round((idx * 100) / (len(loader)), 4)}% Likelihood:      {np.mean(ep_loss)} Patience:      {round(patience, 5)}   Time:  {elapsed_time}" , end="\n")
+                print(f"Epoch: {ep} Level: {p_level}  Progress:      {round((idx * 100) / (len(loader)), 4)}% Likelihood:      {np.mean(ep_loss)} Patience:      {round(patience, 5)}   Time:  {elapsed_time, elapsed_time_without_data_loader}" , end="\n")
                 sys.stdout.flush()
-                
+                # torch.save(model.state_dict(), f'{directory_path}/waveletflow-{args.data}-{args.level}-{ep}-test.pt')
+            time_without_data_loader = time.time()
+
 
             x = x.to(device)
+            if not cf.double_precision[args.level]:
+                x = x.type(torch.float32)
+
             optimizer.zero_grad()
             res_dict = model(x, partial_level=p_level)
             loss = torch.mean(res_dict["likelihood"])
@@ -200,6 +209,11 @@ def main():
             optimizer.step()
             loss_ = loss.detach().cpu().numpy()
             ep_loss.append(loss_)
+
+
+            torch.cuda.synchronize()
+            elapsed_time_without_data_loader += time.time() - time_without_data_loader
+            start_time = time.time()
         avg_loss = np.mean(ep_loss)
         if lowest >= avg_loss:    
             lowest = avg_loss
@@ -213,6 +227,7 @@ def main():
         ep += 1
         if patience == 10:
             break
+        
 parser = argparse.ArgumentParser()
 parser.add_argument('--config', type=str, default="configs/example_config_hcc_prior.py", help='specify config')
 parser.add_argument('--level', type=int, default=-1, help='training level')
