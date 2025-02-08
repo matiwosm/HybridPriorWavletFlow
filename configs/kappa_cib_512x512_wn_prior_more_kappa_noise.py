@@ -29,7 +29,7 @@ unnormalize_prior = True
 dataset = 'My_lmdb'   #replace with 'My_lmdb' with your dataset
 channels_to_get = ['kappa', 'cib']
 noise_dict = {
-    'kappa' : [10.0, 21600]
+    'kappa' : [5.0, 21600]
 }
 data_shape = (5, 512, 512)   #this is the shape of the data in the dataset
 dataset_path = '/sdf/group/kipac/users/mati/yukki_sim_train_512x512/'
@@ -40,9 +40,9 @@ norm_type = ['std']*10
 double_precision = [None, True, True, True, True, True, False, False, False, False]
 
 #powerspectra and normalization
-std_path = 'norm_stds/512x512_final_mean_stats_all_levels_kappa_noise_1.0_noise_freq_21600_kappa_cib.json'
-ps_path = 'ps/512x512_kappa_noise_1.0_noise_freq_21600_kappa_cib/dwtlevel'
+std_path = 'norm_stds/512x512_final_mean_stats_all_levels_kappa_noise_5.0_noise_freq_21600_kappa_cib.json'
+ps_path = 'ps/512x512_kappa_noise_5.0_noise_freq_21600_kappa_cib/dwtlevel'
 
 #output paths
-saveDir = '/sdf/group/kipac/users/mati/hcc_model_512_noised_kappa_nyquest_noise/'
-plotSaveDir = 'plots_wn_model_512_noised_kappa_nyquest_noise/'
+saveDir = '/sdf/group/kipac/users/mati/hcc_model_512_noised_kappa_nyquest_higher_noise/'
+plotSaveDir = 'plots_wn_model_512_noised_kappa_nyquest_higher_noise/'

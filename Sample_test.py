@@ -905,11 +905,11 @@ def main():
     start = time.time()
     iter_loader = iter(loader)
     print('Calculating the power spectra of low-frequency DWT components')
-    compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=False, cond_on_target=True, max_iterations=len(loader))
+    compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=False, cond_on_target=False, max_iterations=10)
 
     iter_loader = iter(loader)
     print('Calculating the power spectra of high-frequency DWT components')
-    compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=True, cond_on_target=True, max_iterations=len(loader))
+    compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=True, cond_on_target=False, max_iterations=10)
 
     iter_loader = iter(loader)
     print('Calculating bispectrum of the final map')
@@ -922,7 +922,7 @@ def main():
     cf, 
     mean_stds_all_levels, 
     device, 
-    cond_on_target=True,
+    cond_on_target=False,
     n_thresholds=50,
     max_iterations=len(loader),
 )
