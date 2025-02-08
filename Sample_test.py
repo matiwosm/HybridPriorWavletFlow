@@ -4,7 +4,7 @@ import re
 import torch
 import random
 import numpy as np
-from data_loader import My_lmdb, yuuki_256
+from data_loader import *
 from importlib.machinery import SourceFileLoader
 from torch.utils.data import DataLoader
 import torch.optim as optim
@@ -37,7 +37,7 @@ torch.cuda.manual_seed_all(seed)
 torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.deterministic = True
 torch.use_deterministic_algorithms(True)
-device = torch.device("cuda")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.cuda.empty_cache()
 
 torch.set_default_dtype(torch.float64)
@@ -80,7 +80,7 @@ def plot_samples(data, level):
 
 def compute_and_plot_minkowski_functionals_no_prior(
     model, 
-    iter_loader, 
+    loader, 
     cf, 
     mean_stds_all_levels, 
     device, 
@@ -129,6 +129,7 @@ def compute_and_plot_minkowski_functionals_no_prior(
     global_max = None
     count_batches = 0
 
+    iter_loader = iter(loader)
     for i in range(max_iterations):
         try:
             batch = next(iter_loader)
@@ -140,7 +141,9 @@ def compute_and_plot_minkowski_functionals_no_prior(
 
         count_batches += 1
         target = batch.to(device)
-
+        #noising data
+        target = apply_noise_torch_vectorized(target, cf.channels_to_get, cf.noise_dict)
+        target = scale_data_pt(target, cf.channels_to_get)
 
         # Get final maps (Target, Sample)
         tar_map, smp_map = get_final_maps_from_model(
@@ -199,6 +202,7 @@ def compute_and_plot_minkowski_functionals_no_prior(
         },
     }
     sample_count = 0
+    iter_loader = iter(loader)
 
     for i in range(max_iterations):
         try:
@@ -210,6 +214,9 @@ def compute_and_plot_minkowski_functionals_no_prior(
             print(f"Second pass Processed {i} iterations...")
 
         target = batch.to(device)
+        target = apply_noise_torch_vectorized(target, cf.channels_to_get, cf.noise_dict)
+        target = scale_data_pt(target, cf.channels_to_get)
+        
         tar_map, smp_map = get_final_maps_from_model(
             model, target, mean_stds_all_levels, cf, cond_on_target
         )
@@ -323,7 +330,6 @@ def compute_and_plot_minkowski_functionals_no_prior(
 # Helper function to retrieve final maps (Target, Sample) from the model
 ###############################################################################
 def get_final_maps_from_model(model, target, mean_stds_all_levels, cf, cond_on_target=True):
-    import torch
     tar_map = target
 
     # Now get the final sample from the model:
@@ -400,13 +406,18 @@ def compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_lev
 
     accumulators = {}
     total_count = 0
-
+    
     # Accumulate statistics across many batches
     for i in range(max_iterations):
         try:
             target = next(iter_loader).to(device)
         except StopIteration:
             break
+        #noising data
+        target = apply_noise_torch_vectorized(target, cf.channels_to_get, cf.noise_dict)
+        target = scale_data_pt(target, cf.channels_to_get)
+
+        
         if i % 10 == 0:
             print(f"Processed {i} iterations... in {timer} seconds")
 
@@ -555,7 +566,11 @@ def compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_lev
                 # Fractional difference plot
                 axd.errorbar(ell[1:], res['y'][:], yerr=res['y_err'][:], fmt='.-', ecolor='red',
                              label='(Sample - Target)/Target')
+                
+                
                 axd.semilogx(ell[1:], np.zeros(len(ell[1:])), 'k-')
+                if level == cf.nLevels:
+                    axd.semilogx(np.ones(len(ell[1:]))*21600, np.linspace(-0.08, 0.08, len(ell[1:])))
                 axd.set_ylim(-0.1, 0.1)
                 axd.set_ylabel('$C_{\\ell}$')
                 axd.set_xlabel('$\\ell$')
@@ -596,6 +611,136 @@ def compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_lev
 
     print("All plots saved successfully.")
     print(f'plot paths = {diff_path} and {spec_path}')
+
+def compute_and_plot_bispectra(model, iter_loader, cf, mean_stds_all_levels, device, plotSaveDir, comps_to_get,
+                             cond_on_target=False, max_iterations=3000):
+    """
+    Compute bispectra for full maps (not DWT levels) and compare target vs samples
+    - One figure with fractional differences
+    - One figure with absolute bispectra
+    - Rows: different channels/components
+    """
+    
+    # Configuration
+    util_obj = util()
+    bin_size = 9  # Number of bispectrum bins
+    n_channels = len(comps_to_get)
+    
+    timer = 0
+    
+    # Initialize accumulators
+    accumulators = {
+        'target': {c: {'sum': 0, 'sum2': 0} for c in range(n_channels)},
+        'sample': {c: {'sum': 0, 'sum2': 0} for c in range(n_channels)},
+        'count': 0
+    }
+
+    # Batch processing
+    for i in range(max_iterations):
+        try:
+            target = next(iter_loader).to(device)
+        except StopIteration:
+            break
+        print(i)    
+        # Preprocess target
+        target = apply_noise_torch_vectorized(target, cf.channels_to_get, cf.noise_dict)
+        target = scale_data_pt(target, cf.channels_to_get)
+        
+        # Generate samples (full map only)
+        with torch.no_grad():
+            sample = model.sample(
+                mean_stds_all_levels,
+                target=target,
+                n_batch=cf.sample_batch_size,
+                cond_on_target=cond_on_target,
+                comp='low'
+            )[-1].detach().cpu().numpy()
+            
+        target = target.detach().cpu().numpy()
+        accumulators['count'] += target.shape[0]
+        
+        # Process batch
+        nx = target.shape[-1]
+        dx = (0.5/60 * np.pi/180)
+        for j in range(target.shape[0]): 
+            for c in range(n_channels):
+                # Target bispectrum
+                ell_t, bisp_t = util_obj.get_2d_bispectrum_monte_carlo(nx, dx, target[j,c], bin_size, scale='log')
+                
+                # Sample bispectrum
+                _, bisp_s = util_obj.get_2d_bispectrum_monte_carlo(nx, dx, sample[j,c], bin_size, scale='log')
+
+                # Accumulate statistics
+                accumulators['target'][c]['sum'] += bisp_t
+                accumulators['target'][c]['sum2'] += bisp_t**2
+                accumulators['sample'][c]['sum'] += bisp_s
+                accumulators['sample'][c]['sum2'] += bisp_s**2
+
+    # Final statistics
+    n_total = accumulators['count']
+    results = {}
+    
+    for c in range(n_channels):
+        t_mean = accumulators['target'][c]['sum'] / n_total
+        t_err = np.sqrt(accumulators['target'][c]['sum2']/n_total - t_mean**2) / np.sqrt(n_total)
+        
+        s_mean = accumulators['sample'][c]['sum'] / n_total
+        s_err = np.sqrt(accumulators['sample'][c]['sum2']/n_total - s_mean**2) / np.sqrt(n_total)
+        
+        # Fractional difference
+        frac_diff = (s_mean - t_mean) / t_mean
+        frac_err = np.sqrt((s_err/t_mean)**2 + (s_mean*t_err/t_mean**2)**2)
+        
+        results[c] = {
+            'ell': ell_t,
+            'target_mean': t_mean,
+            'target_err': t_err,
+            'sample_mean': s_mean,
+            'sample_err': s_err,
+            'frac_diff': frac_diff,
+            'frac_err': frac_err
+        }
+
+    # Plotting
+    fig_diff, ax_diff = plt.subplots(n_channels, 1, figsize=(8, 4*n_channels))
+    fig_spec, ax_spec = plt.subplots(n_channels, 1, figsize=(8, 4*n_channels))
+
+    for c in range(n_channels):
+        res = results[c]
+        ell = res['ell']
+        
+        # Fractional difference plot
+        ax_diff[c].errorbar(ell[1:], res['frac_diff'][1:], yerr=res['frac_err'][1:],
+                          fmt='o-', capsize=3, label=f'Channel {comps_to_get[c]}')
+        ax_diff[c].axhline(0, color='k', linestyle='--')
+        ax_diff[c].set(xscale='log', ylim=(-0.2, 0.2),
+                     xlabel='$\ell$', ylabel='(Sample - Target)/Target')
+        ax_diff[c].legend()
+        
+        # Absolute spectra plot
+        ax_spec[c].errorbar(ell[1:], res['target_mean'][1:], yerr=res['target_err'][1:],
+                          fmt='o-', label='Target')
+        ax_spec[c].errorbar(ell[1:], res['sample_mean'][1:], yerr=res['sample_err'][1:],
+                          fmt='o-', label='Sample')
+        ax_spec[c].set(xscale='log', yscale='log',
+                     xlabel='$\ell$', ylabel='$B_\ell$')
+        ax_spec[c].legend()
+
+    # Save plots
+    fig_diff.tight_layout()
+    fig_spec.tight_layout()
+    
+    diff_path = os.path.join(plotSaveDir, 'fullmap_bispectrum_fractional.png')
+    spec_path = os.path.join(plotSaveDir, 'fullmap_bispectrum_absolute.png')
+    
+    fig_diff.savefig(diff_path, dpi=150, bbox_inches='tight')
+    fig_spec.savefig(spec_path, dpi=150, bbox_inches='tight')
+    
+    plt.close(fig_diff)
+    plt.close(fig_spec)
+
+    print(f"Bispectrum plots saved to:\n{diff_path}\n{spec_path}")
+    return results
 
 
 
@@ -713,13 +858,13 @@ def main():
 
         #load the models for all levels
         if i == p.baseLevel:
-            model = WaveletFlow(cf=p, cond_net=Conditioning_network(), partial_level=i, prior=prior, stds=mean_stds_this_levels, priortype=priortype)
-            model.load_state_dict(torch.load(directory_path + selected_files[i - p.baseLevel], weights_only=True))
+            model = WaveletFlow(cf=p, cond_net=Conditioning_network(), partial_level=i, prior=prior, stds=mean_stds_this_levels, priortype=priortype, device=device)
+            model.load_state_dict(torch.load(directory_path + selected_files[i - p.baseLevel], weights_only=True, map_location=device))
             total_params = sum(p.numel() for p in model.parameters())
             print(f"Total number of parameters for level {p_level}: {total_params} \n")
         else:
-            model1 = WaveletFlow(cf=p, cond_net=Conditioning_network(), partial_level=i, prior=prior, stds=mean_stds_this_levels, priortype=priortype)
-            model1.load_state_dict(torch.load(directory_path + selected_files[i - p.baseLevel], weights_only=True))
+            model1 = WaveletFlow(cf=p, cond_net=Conditioning_network(), partial_level=i, prior=prior, stds=mean_stds_this_levels, priortype=priortype, device=device)
+            model1.load_state_dict(torch.load(directory_path + selected_files[i - p.baseLevel], weights_only=True, map_location=device))
             total_params = sum(p.numel() for p in model1.parameters())
             print(f"Total number of parameters for level {p_level}: {total_params} \n")
             model.sub_flows[i] = model1.sub_flows[i]
@@ -743,35 +888,43 @@ def main():
         num_classes=1,
         class_cond=False,
         channels_to_use=cf.channels_to_get,
-        noise_dict=cf.noise_dict,        # noise only these channels
-        apply_scaling=True,           # do the scaling
+        noise_dict={},        # noise only these channels
+        apply_scaling=False,           # do the scaling
         data_shape=cf.data_shape       
     )
 
 
-    loader = DataLoader(dataset, batch_size=cf.sample_batch_size, shuffle=True, pin_memory=True)
-    iter_loader = iter(loader)
+    loader = DataLoader(dataset, batch_size=cf.sample_batch_size, shuffle=True, pin_memory=True, drop_last=True)
 
-
+    print("len loader = ", len(loader))
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total number of parameters for all levels: {total_params} \n")
 
     #calculate and plot power spectra and minkowski functionals
     #caution: cond_on_target should be False for proper results. Set to True only for debuging.
     start = time.time()
-    compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=False, cond_on_target=False, max_iterations=20)
-    # compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=True, cond_on_target=False, max_iterations=2)
+    iter_loader = iter(loader)
+    print('Calculating the power spectra of low-frequency DWT components')
+    compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=False, cond_on_target=True, max_iterations=len(loader))
 
+    iter_loader = iter(loader)
+    print('Calculating the power spectra of high-frequency DWT components')
+    compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=True, cond_on_target=True, max_iterations=len(loader))
 
+    iter_loader = iter(loader)
+    print('Calculating bispectrum of the final map')
+    compute_and_plot_bispectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, cond_on_target=False, max_iterations=50)
+
+    print('Calculating Minkowski functionals of the final map')
     compute_and_plot_minkowski_functionals_no_prior(
     model, 
-    iter_loader, 
+    loader, 
     cf, 
     mean_stds_all_levels, 
     device, 
-    cond_on_target=False,
+    cond_on_target=True,
     n_thresholds=50,
-    max_iterations=60,
+    max_iterations=len(loader),
 )
 
     print(time.time() - start)

@@ -8,7 +8,7 @@ import numpy as np
 from utilities import normalize_dwt_components, unnormalize_dwt_components
 from corr_prior import *
 class WaveletFlow(nn.Module):
-    def __init__(self, cf, cond_net, partial_level=-1, prior=None, stds=None, priortype='WN'):
+    def __init__(self, cf, cond_net, partial_level=-1, prior=None, stds=None, priortype='WN', device='cpu'):
         super().__init__()
         self.n_levels = cf.nLevels
         self.base_level = cf.baseLevel
@@ -25,7 +25,7 @@ class WaveletFlow(nn.Module):
             cf.K = cf.stepsPerResolution[partial_level - 1]
             cf.L = cf.stepsPerResolution_L[partial_level - 1]
             shape = (cf.imShape[0], base_size, base_size)
-            self.base_flow = Glow(cf, shape, False, prior, self.prior_type, self.normalize, self.stds, self.normalization_type)
+            self.base_flow = Glow(cf, shape, False, prior, self.prior_type, self.normalize, self.stds, self.normalization_type, device)
         else:
             self.base_flow = None
         
@@ -41,7 +41,7 @@ class WaveletFlow(nn.Module):
                 cf.K = cf.stepsPerResolution[level-1]
                 cf.L = cf.stepsPerResolution_L[level-1]
                 shape = (cf.imShape[0] * 3, h, w)
-                self.sub_flows.append(Glow(cf, shape, cf.conditional, prior, self.prior_type, self.normalize, self.stds, self.normalization_type))
+                self.sub_flows.append(Glow(cf, shape, cf.conditional, prior, self.prior_type, self.normalize, self.stds, self.normalization_type, device))
         self.sub_flows = nn.ModuleList(self.sub_flows)
 
     def forward(self, x, std=None, partial_level=-1):
@@ -70,7 +70,7 @@ class WaveletFlow(nn.Module):
                 if partial_level != -1:
                     break 
             else:
-                if self.partial_level <= 8 and level > 8:
+                if self.partial_level <= 10 and level > 10:
                     pass
                 else:
                     dwt_components = self.dwt.forward(low_freq)
@@ -91,7 +91,8 @@ class WaveletFlow(nn.Module):
         return latents
     
     def sample(self, mean_stds_all_levels=None, target=None, latents=None, partial_level=-1, comp='low', cond_on_target=False, n_batch=64):
-        return self.sample_unnorm(target, latents, partial_level, comp, cond_on_target, n_batch)
+        with torch.no_grad():
+            return self.sample_unnorm(target, latents, partial_level, comp, cond_on_target, n_batch)
         
 
     def sample_unnorm(self, target=None, latents=None, partial_level=-1, comp='low', cond_on_target=False, n_batch=64):
@@ -137,9 +138,9 @@ class WaveletFlow(nn.Module):
                 x = self.dwt.inverse({'low': base, 'high': x_unnorm})
 
                 # If conditioning on target at lower levels:
-                if cond_on_target and level < 5:
+                if cond_on_target and level < 2:
                     # Use the target's data instead of the reconstructed base if desired
-                    x = data[level - self.base_level]
+                    x = (data[level - self.base_level])
                 base = x  # Update base for next iteration
                 samples.append(x)  # Append reconstruction at this level
 

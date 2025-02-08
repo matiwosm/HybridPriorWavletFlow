@@ -37,7 +37,7 @@ torch.cuda.manual_seed_all(seed)
 torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.deterministic = True
 torch.use_deterministic_algorithms(True)
-device = torch.device("cuda")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.cuda.empty_cache()
 
 torch.set_default_dtype(torch.float64)
@@ -134,13 +134,13 @@ def main():
 
         #load the models for all levels
         if i == p.baseLevel:
-            model = WaveletFlow(cf=p, cond_net=Conditioning_network(), partial_level=i, prior=prior, stds=mean_stds_this_levels, priortype=priortype)
-            model.load_state_dict(torch.load(directory_path + selected_files[i - p.baseLevel], weights_only=True))
+            model = WaveletFlow(cf=p, cond_net=Conditioning_network(), partial_level=i, prior=prior, stds=mean_stds_this_levels, priortype=priortype, device=device)
+            model.load_state_dict(torch.load(directory_path + selected_files[i - p.baseLevel], weights_only=True, map_location=device))
             total_params = sum(p.numel() for p in model.parameters())
             print(f"Total number of parameters for level {p_level}: {total_params}")
         else:
-            model1 = WaveletFlow(cf=p, cond_net=Conditioning_network(), partial_level=i, prior=prior, stds=mean_stds_this_levels, priortype=priortype)
-            model1.load_state_dict(torch.load(directory_path + selected_files[i - p.baseLevel], weights_only=True))
+            model1 = WaveletFlow(cf=p, cond_net=Conditioning_network(), partial_level=i, prior=prior, stds=mean_stds_this_levels, priortype=priortype, device=device)
+            model1.load_state_dict(torch.load(directory_path + selected_files[i - p.baseLevel], weights_only=True, map_location=device))
             total_params = sum(p.numel() for p in model1.parameters())
             print(f"Total number of parameters for level {p_level}: {total_params}")
             model.sub_flows[i] = model1.sub_flows[i]
@@ -158,7 +158,7 @@ def main():
 
 if __name__  == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, default="configs/kappa_cib_saved_model_config.py", help='specify config')
+    parser.add_argument('--config', type=str, default="configs/old_configs/kappa_cib_saved_model_config.py", help='specify config')
     parser.add_argument('--data', type=str, default="agora", help='input data')
     args = parser.parse_args()
     main()

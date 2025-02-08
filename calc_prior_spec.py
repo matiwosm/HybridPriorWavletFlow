@@ -113,7 +113,7 @@ max_m = cf.nLevels - 1
 
 # including the 'low' components and high-frequency components.
 for m in range(0, max_m):
-    loader = DataLoader(dataset, batch_size=8096)
+    loader = DataLoader(dataset, batch_size=1024)
     util_obj = util()
     
     # Initialize dictionaries to hold accumulated spectra and total std deviations

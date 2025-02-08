@@ -135,8 +135,8 @@ class CorrelatedNormalDWTGeneral:
             torch.zeros(2), torch.eye(2)
         ).expand((b_nr,))
         
-        print('estimating fudge factor')
-        s = self.sample_n(3)
+        # print('estimating fudge factor')
+        # s = self.sample_n(3)
         # for i in range(s.shape[1]):
         #     print(f'std channel {i}:', torch.std(s[:, i, :, :]))
             # print(f'max channel {i}:', torch.max(s[:, i, :, :]))

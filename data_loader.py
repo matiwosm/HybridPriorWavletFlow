@@ -7,21 +7,233 @@ import random
 import numpy as np
 import lmdb
 import os
-
+import torch
 import os
 import lmdb
 import numpy as np
 from torch.utils.data import Dataset
 
-class My_lmdb(Dataset):    
-    # Channel name -> index mapping
-    CHANNEL_MAP = {
-        'kappa': 0,
-        'ksz'  : 1,
-        'tsz'  : 2,
-        'cib'  : 3,
-        'rad'  : 4
+# Channel name -> index mapping
+CHANNEL_MAP = {
+    'kappa': 0,
+    'ksz'  : 1,
+    'tsz'  : 2,
+    'cib'  : 3,
+    'rad'  : 4
+}
+
+def scale_data_pt(
+    data: torch.Tensor, 
+    channels: list[str], 
+    reverse: bool = False
+) -> torch.Tensor:
+    """
+    Unified PyTorch function for forward-scaling or reverse-scaling of a subset of channels.
+    
+    Parameters
+    ----------
+    data : torch.Tensor
+        Shape (B, N, H, W). 
+        B = batch size, N = number of channels actually in this tensor, H, W = spatial dims.
+    channels : list of str
+        Length N list specifying the channels in 'data' order.
+        Valid options: ['kappa', 'ksz', 'tsz', 'cib', 'rad'].
+    reverse : bool, default=False
+        If False, apply *forward* scaling (like your _apply_scaling).
+        If True,  apply *reverse* scaling (like your reverse_scale).
+
+    Returns
+    -------
+    torch.Tensor
+        Scaled (or reverse-scaled) data, shape (B, N, H, W), same as input.
+    """
+
+    # ---- Constants for all channels ----
+    # kappa
+    kap_mean  =  0.0024131738313520608
+    kap_std   =  0.11190232474340092
+    # ksz
+    ksz_mean  =  0.5759176599953563
+    ksz_std   =  2.0870242684435416
+    # tsz
+    tsz_std   =  3.2046874257710276
+    ttsz_mean = -0.9992715262205959    # "trans_tsz_mean"
+    ttsz_std  =  0.23378351341581394   # "trans_tsz_std"
+    
+    # cib
+    cib_std   =  16.5341785469026
+    tcib_mean =  0.7042645521815042
+    tcib_std  =  0.3754746350117235
+    # rad
+    rad_std   =  0.0004017594060247909
+    trad_mean =  0.6288525847415318
+    trad_std  =  2.1106109860689175
+
+    # ---- Define per-channel forward transforms ----
+    def forward_kappa(x: torch.Tensor) -> torch.Tensor:
+        return (x - kap_mean) / kap_std
+    
+    def forward_ksz(x: torch.Tensor) -> torch.Tensor:
+        return (x - ksz_mean) / ksz_std
+    
+    def forward_tsz(x: torch.Tensor) -> torch.Tensor:
+        # sign & log transform => sign(x)*log(abs(x)/tsz_std + 1)
+        x_out = torch.sign(x) * torch.log(torch.abs(x)/tsz_std + 1.0)
+        # shift & scale
+        x_out = (x_out - ttsz_mean) / ttsz_std
+        return x_out
+
+    def forward_cib(x: torch.Tensor) -> torch.Tensor:
+        x_out = torch.sign(x) * torch.log(torch.abs(x)/cib_std + 1.0)
+        x_out = (x_out - tcib_mean) / tcib_std
+        return x_out
+
+    def forward_rad(x: torch.Tensor) -> torch.Tensor:
+        x_out = torch.sign(x) * torch.log(torch.abs(x)/rad_std + 1.0)
+        x_out = (x_out - trad_mean) / trad_std
+        return x_out
+
+    # ---- Define per-channel reverse transforms ----
+    def reverse_kappa(x: torch.Tensor) -> torch.Tensor:
+        return x * kap_std + kap_mean
+
+    def reverse_ksz(x: torch.Tensor) -> torch.Tensor:
+        return x * ksz_std + ksz_mean
+
+    def reverse_tsz(x: torch.Tensor) -> torch.Tensor:
+        # undo shift & scale
+        x_out = x * ttsz_std + ttsz_mean
+        # undo sign & log => sign(...) * (exp(abs(...)) - 1)*tsz_std
+        x_out = torch.sign(x_out) * (torch.exp(torch.abs(x_out)) - 1.0) * tsz_std
+        return x_out
+
+    def reverse_cib(x: torch.Tensor) -> torch.Tensor:
+        x_out = x * tcib_std + tcib_mean
+        x_out = torch.sign(x_out) * (torch.exp(torch.abs(x_out)) - 1.0) * cib_std
+        return x_out
+
+    def reverse_rad(x: torch.Tensor) -> torch.Tensor:
+        x_out = x * trad_std + trad_mean
+        x_out = torch.sign(x_out) * (torch.exp(torch.abs(x_out)) - 1.0) * rad_std
+        return x_out
+
+    # ---- Map channel name -> (forward_func, reverse_func) ----
+    channel_transforms = {
+        'kappa': (forward_kappa, reverse_kappa),
+        'ksz':   (forward_ksz,   reverse_ksz),
+        'tsz':   (forward_tsz,   reverse_tsz),
+        'cib':   (forward_cib,   reverse_cib),
+        'rad':   (forward_rad,   reverse_rad),
     }
+
+    # Clone input so we don't modify it in-place
+    out = data.clone()
+
+    # Loop over the channels we actually have in `out`
+    for i, ch_name in enumerate(channels):
+        if ch_name not in channel_transforms:
+            raise ValueError(f"Unknown channel name '{ch_name}' - must be one of {list(channel_transforms.keys())}")
+        
+        fwd_func, rev_func = channel_transforms[ch_name]
+        
+        if reverse:
+            out[:, i, :, :] = rev_func(out[:, i, :, :])
+        else:
+            out[:, i, :, :] = fwd_func(out[:, i, :, :])
+
+    return out
+
+
+def apply_noise_torch_vectorized(
+    data: torch.Tensor,
+    channel_names: list[str],
+    noise_dict: dict[str, tuple[float, float]],
+    dx: float = 0.5
+) -> torch.Tensor:
+    """
+    Vectorized noise injection in frequency space for a subset of channels.
+    
+    Parameters
+    ----------
+    data : torch.Tensor
+        Shape (B, N, H, W). 
+          - B: batch size
+          - N: number of channels actually in this tensor
+          - H, W: spatial dimensions
+    channel_names : list[str]
+        A list of length N giving the name of each channel in 'data' order.
+        Valid channel names might be ['kappa', 'ksz', 'tsz', 'cib', 'rad'], or any subset.
+    noise_dict : dict
+        Mapping channel_name -> [noise_std, threshold_ell].
+        Example:
+            {
+              'tsz': [5e-4, 2000.0],
+              'cib': [1e-3, 4000.0],
+              ...
+            }
+        If threshold_ell is None, we add *uniform* (white) noise over all frequencies.
+    dx : float
+        Pixel size in arcminutes (converted to radians internally).
+
+    Returns
+    -------
+    torch.Tensor
+        The noised data, same shape as 'data' (B, N, H, W). Real-valued.
+    """
+    # Convert dx from arcmin -> radians
+    dx_rad = dx / 60.0 * np.pi / 180.0
+    
+    B, N, H, W = data.shape
+    device = data.device
+
+    # 1) Forward FFT for all channels/batch items at once
+    data_fft = torch.fft.fft2(data, dim=(-2, -1))  # shape (B, N, H, W), complex
+
+    # 2) Build frequency grid for (H, W) only once
+    freq_y = torch.fft.fftfreq(H, d=dx_rad, device=device) * 2.0 * np.pi  # shape (H,)
+    freq_x = torch.fft.fftfreq(W, d=dx_rad, device=device) * 2.0 * np.pi  # shape (W,)
+    freq2d_y, freq2d_x = torch.meshgrid(freq_y, freq_x, indexing='ij')    # (H, W)
+    freq_magnitude = torch.sqrt(freq2d_x**2 + freq2d_y**2)               # (H, W)
+
+    # 3) For each channel in 'channel_names', add noise if specified in noise_dict
+    for i, ch_name in enumerate(channel_names):
+        if ch_name not in noise_dict:
+            # If the user didn't specify noise for this channel, skip
+            continue
+        
+        noise_std, threshold_ell = noise_dict[ch_name]
+
+        # Create mask for frequencies above threshold, or uniform if threshold_ell is None
+        if threshold_ell is None:
+            # White noise over all freq
+            mask_2d = torch.ones_like(freq_magnitude, dtype=torch.bool)
+        else:
+            mask_2d = (freq_magnitude > threshold_ell)
+
+        # Expand mask to (1, 1, H, W) so it can broadcast over (B, 1, H, W)
+        mask_4d = mask_2d.unsqueeze(0).unsqueeze(0)
+
+        # Generate complex Gaussian noise in shape (B, 1, H, W)
+        noise_real = torch.randn((B, 1, H, W), device=device, dtype=data_fft.dtype) * noise_std
+        noise_imag = torch.randn((B, 1, H, W), device=device, dtype=data_fft.dtype) * noise_std
+        noise_complex = noise_real + 1j * noise_imag
+
+        # Apply mask in frequency domain
+        noise_complex = noise_complex * mask_4d
+
+        # Add to the FFT of this channel
+        data_fft[:, i : i+1, :, :] += noise_complex
+
+    # 4) Inverse FFT to get noised data in spatial domain
+    data_noisy = torch.fft.ifft2(data_fft, dim=(-2, -1))
+
+    # 5) Take real part only
+    data_noisy = data_noisy.real
+
+    return data_noisy
+
+
+class My_lmdb(Dataset):    
 
     def __init__(
         self, 
@@ -67,11 +279,11 @@ class My_lmdb(Dataset):
         # -- New fields --
         # If channels_to_use is None or empty, default to all available channels
         if channels_to_use is None or len(channels_to_use) == 0:
-            channels_to_use = list(self.CHANNEL_MAP.keys())  # all: ['kappa','ksz','tsz','cib','rad']
+            channels_to_use = list(CHANNEL_MAP.keys())  # all: ['kappa','ksz','tsz','cib','rad']
         self.channels_to_use = channels_to_use
         
         # Convert channel names to indices
-        self.channel_indices = [self.CHANNEL_MAP[ch] for ch in self.channels_to_use]
+        self.channel_indices = [CHANNEL_MAP[ch] for ch in self.channels_to_use]
         
         # Noise dictionary (channel_name -> float). If None, no noise is applied.
         self.noise_dict = noise_dict if noise_dict is not None else {}
@@ -110,6 +322,7 @@ class My_lmdb(Dataset):
         # Convert bytes -> np array, then reshape
         lmdb_data = np.frombuffer(raw_data, dtype=np.float64).reshape(self.data_shape)
         
+        #remove this bit (the functions have moved out of the class)
         # Optionally apply noise & scaling
         if self.apply_scaling:
             lmdb_data = self._apply_noise(lmdb_data)
@@ -138,7 +351,7 @@ class My_lmdb(Dataset):
         for ch_name, noise_params in self.noise_dict.items():
             noise_std = noise_params[0]
             threshold_ell = noise_params[1]
-            ch_idx = self.CHANNEL_MAP[ch_name]
+            ch_idx = CHANNEL_MAP[ch_name]
             
             if threshold_ell is not None:
                 if ch_idx < data.shape[0]:

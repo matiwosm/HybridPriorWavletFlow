@@ -10,7 +10,7 @@ from nf.layers import *
 import numpy as np
 
 class FlowStep(nn.Module):
-    def __init__(self, params, C, H, W, idx, conditional):
+    def __init__(self, params, C, H, W, idx, conditional, device):
         super().__init__()
         hidden_channels = params.hiddenChannels
         self.flow_permutation = params.perm
@@ -32,7 +32,7 @@ class FlowStep(nn.Module):
         if params.coupling == 'affine':
             self.coupling = Affine(C, C, hidden_channels, conditional)
         elif params.coupling == 'checker':
-            self.coupling = MyCheckerboard(C, C, H, W, hidden_channels, idx%2, conditional, params.net_type)
+            self.coupling = MyCheckerboard(C, C, H, W, hidden_channels, idx%2, conditional, params.net_type, device=device)
         elif params.coupling == 'rqs':
             self.coupling = MyCheckerboardRQS(C, C, H, W, hidden_channels, idx%2, conditional, params.net_type)
         elif params.coupling == 'rqs_per_c':
@@ -78,7 +78,7 @@ class FlowStep(nn.Module):
 
 
 class FlowNet(nn.Module):
-    def __init__(self, params, shape, conditional):
+    def __init__(self, params, shape, conditional, device):
         super().__init__()
         self.layers = nn.ModuleList()
         self.output_shapes = []
@@ -87,7 +87,7 @@ class FlowNet(nn.Module):
         C, H, W = shape
 
         for idx in range(self.K):
-            self.layers.append(FlowStep(params, C, H, W, idx, conditional))
+            self.layers.append(FlowStep(params, C, H, W, idx, conditional, device))
             self.output_shapes.append([-1, C, H, W])
 
     def forward(self, input, conditioning, logdet=None, reverse=False, temperature=None):
@@ -118,50 +118,11 @@ class FlowNet(nn.Module):
         return z, logdet
 
 
-class FlowNet(nn.Module):
-    def __init__(self, params, shape, conditional):
-        super().__init__()
-        self.layers = nn.ModuleList()
-        self.output_shapes = []
-        self.K = params.K
-        self.L = params.L
-        C, H, W = shape
-
-        for idx in range(self.K):
-            self.layers.append(FlowStep(params, C, H, W, idx, conditional))
-            self.output_shapes.append([-1, C, H, W])
-
-    def forward(self, input, conditioning, logdet=None, reverse=False, temperature=None):
-        if reverse:
-            return self.decode(input, conditioning, temperature)
-        else:
-            return self.encode(input, conditioning, logdet)
-
-    def encode(self, z, conditioning, logdet):
-        for layer, shape in zip(self.layers, self.output_shapes):
-            if isinstance(layer, SqueezeLayer):
-                z, logdet = layer(z, logdet, reverse=False)
-            elif isinstance(layer, FlowStep):
-                z, logdet = layer(z, conditioning, logdet, reverse=False)
-            else:
-                z, logdet = layer(z, logdet, reverse=False)
-            
-        return z, logdet
-
-    def decode(self, z, conditioning, logdet, temperature=None):
-        for layer, shape in zip(reversed(self.layers), reversed(self.output_shapes)):
-            if isinstance(layer, SqueezeLayer):
-                z, logdet = layer(z, logdet=0, reverse=True)
-            elif isinstance(layer, FlowStep):
-                z, logdet = layer(z, conditioning, logdet=0, reverse=True)
-            else:
-                z, logdet = layer(z, logdet=0, reverse=True)
-        return z, logdet
 
 class Glow(nn.Module):
-    def __init__(self, params, shape, conditional, corr_prior, priortype, normalize=False, norm_constants=None, normalization_type='min_max'):
+    def __init__(self, params, shape, conditional, corr_prior, priortype, normalize=False, norm_constants=None, normalization_type='min_max', device='cpu'):
         super().__init__()
-        self.flow = FlowNet(params, shape, conditional)
+        self.flow = FlowNet(params, shape, conditional, device)
         self.y_classes = params.y_classes
         self.y_condition = params.y_condition
         self.learn_top = params.y_learn_top

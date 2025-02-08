@@ -4,7 +4,7 @@ import re
 import torch
 import random
 import numpy as np
-from data_loader import My_lmdb, yuuki_256
+from data_loader import *
 from importlib.machinery import SourceFileLoader
 from torch.utils.data import DataLoader
 import torch.optim as optim
@@ -72,7 +72,8 @@ def plot_power(iter_loader, samples_dataloader, prior, step, cf, batch_num):
         current_batch_size = batch_size
 
         # Sample data
-        target_data = next(iter_loader).cpu().numpy()  # Shape: (B, C, H, W)
+        target_data = next(iter_loader) # Shape: (B, C, H, W)
+        target_data = scale_data_pt(target_data, cf.channels_to_get).cpu().numpy()
         # target = next(iter_loader)
         # std = 0.3
         # noise = torch.randn_like(target)  # Noise ~ N(0, 1)
@@ -83,7 +84,10 @@ def plot_power(iter_loader, samples_dataloader, prior, step, cf, batch_num):
 
 
         if batch_idx <= batch_num:
-            sample_data = next(samples_dataloader).cpu().numpy()
+            sample_data = next(samples_dataloader)
+            #noising data
+            sample_data = apply_noise_torch_vectorized(sample_data, cf.channels_to_get, cf.noise_dict)
+            sample_data = scale_data_pt(sample_data, cf.channels_to_get).cpu().numpy()
         
 
         # Loop over the batch
@@ -147,8 +151,12 @@ def plot_power(iter_loader, samples_dataloader, prior, step, cf, batch_num):
 
     print('number of model samples = ', model_samples)
     print('number of target and prior samples = ', total_samples)
-    fig_diff, axs_diff = plt.subplots(C, C, figsize=(3*C, 3*C))  # For fractional difference plots
-    fig_pow, axs_pow   = plt.subplots(C, C, figsize=(3*C, 3*C))  # For power spectrum plots
+    if C > 1:
+        fig_diff, axs_diff = plt.subplots(C, C, figsize=(3*C, 3*C))  # For fractional difference plots
+        fig_pow, axs_pow   = plt.subplots(C, C, figsize=(3*C, 3*C))  # For power spectrum plots
+    else:
+        fig_diff, axs_diff = plt.subplots(2, 2, figsize=(3*2, 3*2))  # For fractional difference plots
+        fig_pow, axs_pow   = plt.subplots(2, 2, figsize=(3*2, 3*2))  # For power spectrum plots
 
     for j in range(C):
         for k in range(C):
@@ -206,10 +214,13 @@ def plot_power(iter_loader, samples_dataloader, prior, step, cf, batch_num):
     fig_pow.savefig(pow_path)
     plt.close(fig_pow)
 
-config_file = 'configs/kappa_tsz_cib_nyquist_noise.py'
+config_file = 'configs/example_config_hcc_prior_tsz_only_nyquest_noise.py'
 cf = SourceFileLoader('cf', config_file).load_module()
-# cf.channels_to_get = ['kappa', 'tsz']
-# cf.noise_dict['tsz'] = [15.0, 21600]
+# cf.channels_to_get = ['kappa', 'cib']
+# cf.noise_dict = {}
+# cf.noise_dict['kappa'] = [1.0, 21600]
+# cf.noise_dict['ksz'] = [15.0, 21600]
+# cf.noise_dict['cib'] = [150.0, 21600]
 bdir = cf.val_dataset_path
 file = "data.mdb"
 
@@ -247,4 +258,4 @@ iter_noised = iter(loader_noised)
 #dir to save plots
 if not os.path.exists(cf.plotSaveDir):
     os.makedirs(cf.plotSaveDir)
-plot_power(iter_unnoised, iter_noised, None, 10, cf, 100)
+plot_power(iter_unnoised, iter_noised, None, 10, cf, 10)

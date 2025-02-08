@@ -5,7 +5,7 @@ import sys
 import torch
 import random
 import numpy as np
-from data_loader import My_lmdb, yuuki_256
+from data_loader import *
 from importlib.machinery import SourceFileLoader
 from torch.utils.data import DataLoader
 import torch.optim as optim
@@ -19,6 +19,7 @@ import corr_prior
 import pandas as pd
 import json
 from helper import utils
+from utilities import *
 
 seed = 786
 os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
@@ -101,20 +102,23 @@ def main():
         num_classes=1,
         class_cond=False,
         channels_to_use=cf.channels_to_get,
-        noise_dict=cf.noise_dict,        # noise only these channels
-        apply_scaling=True,           # do the scaling
+        noise_dict={},        # we do the noising outside the dataloader for efficiency
+        apply_scaling=False,           # same with scaling
         data_shape=cf.data_shape       
     )
 
     warmup_loader = DataLoader(dataset, batch_size=cf.batch_size[args.level], shuffle=False, drop_last=True)
     train_loader = torch.utils.data.DataLoader(
         dataset, batch_size=cf.batch_size[args.level], shuffle=True,
-        num_workers=2, drop_last=True)
+        num_workers=0, drop_last=True)
     
     #gradient accumulation
-    acc = int(cf.effective_batch_size/cf.batch_size[args.level])
+    if cf.batch_size[args.level] < cf.eff_batch_size:
+        accumulation_steps = int(cf.eff_batch_size/cf.batch_size[args.level])
+    else:
+        accumulation_steps = 1
     
-    print('batch size ', cf.batch_size[args.level], ' acc ', acc, len(train_loader))
+    print('batch size = ', cf.batch_size[args.level], 'effective batch size = ', cf.eff_batch_size, ' acc = ', accumulation_steps, len(train_loader))
     #normalization factors for the current dwt level
     print('loading stds ', cf.std_path)
     with open(cf.std_path, 'r') as f:
@@ -169,17 +173,22 @@ def main():
         print('loaded ', directory_path + selected_files[p_level-1], selected_files[p_level-1][19:-8])
     optimizer = optim.Adam(model.parameters(), lr=cf.lr, weight_decay=cf.weight_decay)
     
-    print(model)
     lowest = 1e7
     patience = 0
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total number of parameters: {total_params}")
+
+    if cf.parallel[args.level]:
+        model = torch.nn.DataParallel(model)
+
+    model = model.to(device)
+    print(model)
     model.train()
     ep = 1
     if resume:
         ep = int(selected_files[p_level-1][19:-8])
     loader = warmup_loader
-
+    print('Dataset size = ', len(loader))
 
     elapsed_time = 0
     elapsed_time_without_data_loader = 0
@@ -187,39 +196,58 @@ def main():
     
     while True:
         ep_loss = []
-
+        print('starting loop')
         for idx, x in enumerate(loader):
-            torch.cuda.synchronize()
-            elapsed_time += time.time() - start_time
-            if ((idx) % 100) == 0:
+            if ((idx) % 10) == 0:
                 print(f"Epoch: {ep} Level: {p_level}  Progress:      {round((idx * 100) / (len(loader)), 4)}% Likelihood:      {np.mean(ep_loss)} Patience:      {round(patience, 5)}   Time:  {elapsed_time, elapsed_time_without_data_loader}" , end="\n")
                 sys.stdout.flush()
                 # torch.save(model.state_dict(), f'{directory_path}/waveletflow-{args.data}-{args.level}-{ep}-test.pt')
-            time_without_data_loader = time.time()
 
 
             x = x.to(device)
+            #noising data
+            x = apply_noise_torch_vectorized(x, cf.channels_to_get, cf.noise_dict)
+            x = scale_data_pt(x, cf.channels_to_get)
             if not cf.double_precision[args.level]:
                 x = x.type(torch.float32)
 
-            optimizer.zero_grad()
+            torch.cuda.synchronize()
+            elapsed_time += time.time() - start_time
+
+            time_without_data_loader = time.time()
+
             res_dict = model(x, partial_level=p_level)
             loss = torch.mean(res_dict["likelihood"])
+            loss = loss / accumulation_steps
             loss.backward()
-            optimizer.step()
-            loss_ = loss.detach().cpu().numpy()
+            
+            # Accumulate the loss for logging
+            loss_ = loss.detach().cpu().numpy() * accumulation_steps  # Scale back for logging
             ep_loss.append(loss_)
+            
+            # Only step the optimizer and zero gradients after accumulation_steps
+            if ((idx + 1) % accumulation_steps) == 0:
+                optimizer.step()
+                optimizer.zero_grad()
 
 
             torch.cuda.synchronize()
             elapsed_time_without_data_loader += time.time() - time_without_data_loader
             start_time = time.time()
+
         avg_loss = np.mean(ep_loss)
+        if ((idx + 1) % accumulation_steps) != 0:
+            optimizer.step()
+            optimizer.zero_grad()
+
         if lowest >= avg_loss:    
             lowest = avg_loss
             print('saving ' + f'{directory_path}/waveletflow-{args.data}-{args.level}-{ep}-test.pt', '\n')
             sys.stdout.flush()
-            torch.save(model.state_dict(), f'{directory_path}/waveletflow-{args.data}-{args.level}-{ep}-test.pt')
+            if cf.parallel[args.level]:
+                torch.save(model.module.state_dict(), f'{directory_path}/waveletflow-{args.data}-{args.level}-{ep}-test.pt')
+            else:
+                torch.save(model.state_dict(), f'{directory_path}/waveletflow-{args.data}-{args.level}-{ep}-test.pt')
             patience = 0
             loader = train_loader
         else:

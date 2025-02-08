@@ -771,7 +771,7 @@ class CycleMask(nn.Module):
         return z, logdet
     
 class MyCheckerboard(nn.Module):
-    def __init__(self, in_channels, out_channels, H, W, hidden_channels, parity, conditional=True, net_type='ConvNet'):
+    def __init__(self, in_channels, out_channels, H, W, hidden_channels, parity, conditional=True, net_type='ConvNet', device='cpu'):
         super().__init__()
         if conditional:
             if net_type == 'ConvNet':
@@ -788,11 +788,12 @@ class MyCheckerboard(nn.Module):
             elif net_type == 'ResNet':
                 self.block = ConvNet_with_Resnet(in_channels, out_channels * 2, hidden_channels)
         self.mask = self.make_checker_mask((1, 1, H, W), parity)
+        self.mask = self.mask.to(device)
     def make_checker_mask(self, shape, parity):
         checker = torch.ones(shape, dtype=torch.uint8) - parity
         checker[:, :, ::2, ::2] = parity
         checker[:, :, 1::2, 1::2] = parity
-        return checker.to('cuda')
+        return checker
         
     def forward(self, x, logdet, conditioning=None, reverse=False):
         if not reverse:

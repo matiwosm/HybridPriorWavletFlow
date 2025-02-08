@@ -67,7 +67,7 @@ dataset = My_lmdb(
 wavelet = Haar().to(device)
 dwt = Dwt(wavelet=wavelet).to(device)
 for m in range(0, max_m):
-    loader = DataLoader(dataset, batch_size=8096)
+    loader = DataLoader(dataset, batch_size=1024)
     
     # Initialize dictionaries to hold total std deviations, mins, and maxs
     comp_total_std = {}
