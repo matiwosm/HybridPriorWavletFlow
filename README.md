@@ -2,6 +2,8 @@
 
 This repository extends the WaveletFlowPyTorch project, originally found here: [WaveletFlowPyTorch](https://github.com/A-Vzer/WaveletFlowPytorch). We added inverse sampling and other functionalites needed for our work. 
 
+
+The repo https://github.com/matiwosm/SampleHybridPriorWavletFlow.git includes our trained models and the scripts used to generate the plots in our paper. 
 ## Installation
 
 To install the required dependencies, run:
@@ -107,5 +109,3 @@ Ensure that the training and sampling scripts use the same configuration file.
    python Sample_test.py --config config/config_file.py
    ```
 
-
-The repo https://github.com/matiwosm/SampleHybridPriorWavletFlow.git includes our trained models and the scripts used to generate the plots in our associated paper. 
