@@ -16,7 +16,7 @@ if packaging.version.parse(torch.__version__) < packaging.version.parse('1.5.0')
 
 class SimpleNormal:
     def __init__(self, loc, var):
-        print(var)
+        # print(var)
         self.dist = torch.distributions.normal.Normal(loc, var)
         self.shape = loc.shape
     def log_prob(self, x):

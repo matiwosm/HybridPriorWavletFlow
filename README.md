@@ -106,4 +106,6 @@ Ensure that the training and sampling scripts use the same configuration file.
    ```bash
    python Sample_test.py --config config/config_file.py
    ```
+
+
 git@github.com:matiwosm/SampleHybridPriorWavletFlow.git includes the scrts used to generate the plots in our paper. 
