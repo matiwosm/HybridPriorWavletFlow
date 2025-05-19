@@ -23,8 +23,8 @@ from src.dwt.dwt import Dwt
 from tqdm import tqdm
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--config', type=str, default="configs/HCC_prior_best_model_256x256_all_levels_kap_noise_0.01.py", help='specify config')
-parser.add_argument('--output', type=str, default="norm_stds/output.json", help='missing output file name')
+parser.add_argument('--config', type=str, default="configs/CC_prior_best_model_256x256_all_levels_kap_no_noise.py", help='specify config')
+parser.add_argument('--output', type=str, default="norm_stds/256x256_final_mean_stats_all_levels_kappa_cib_no_noise.json", help='missing output file name')
 args = parser.parse_args()
 
 

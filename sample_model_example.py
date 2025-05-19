@@ -153,7 +153,12 @@ def main():
     model = model.eval()
 
     #sampling from model
-    samples = model.sample(n_batch=cf.sample_batch_size)[-1]
+    for i in range(10):
+        if i == 0:
+            samples = model.sample(n_batch=cf.sample_batch_size)[-1]
+        else:
+            samples = torch.cat((samples, model.sample(n_batch=cf.sample_batch_size)[-1]), dim=0)
+    sample = sample.cpu().numpy() 
     print(samples.shape)
 
 if __name__  == '__main__':

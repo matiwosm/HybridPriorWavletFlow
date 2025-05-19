@@ -221,6 +221,11 @@ class MyCheckerboardRQS(nn.Module):
                  mask_type='checkerboard'):
 
         super().__init__()
+        if in_channels == 2:
+           mask_type = 'checkerboard'
+           num_bins = 32
+        print("mask_type = ", mask_type)
+        print("num_bins = ", num_bins)
         self.num_bins = num_bins
         self.min_bin_width = min_bin_width
         self.min_bin_height = min_bin_height
@@ -383,7 +388,9 @@ class MyCheckerboardRQS(nn.Module):
         widths     = params_flat[:, 0*step : 1*step]
         heights    = params_flat[:, 1*step : 2*step]
         derivatives= params_flat[:, 2*step : (3*self.num_bins - 1)]
-
+        # if H == 8 and C == 2:
+        #     print('number of out of bound y values', y_flat[(y_flat < -3.0)].shape[0] + y_flat[(y_flat > 3.0)].shape[0], y_flat.shape[0])
+        #     print('number of out of bound y values if bound was 1.0', y_flat[(y_flat < -1.0)].shape[0] + y_flat[(y_flat > 1.0)].shape[0], y_flat.shape[0])
         # Inverse = True
         x_flat, logabsdet_flat = unconstrained_rational_quadratic_spline(
             y_flat,

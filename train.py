@@ -118,7 +118,7 @@ def main():
     else:
         accumulation_steps = 1
     
-    print('batch size = ', cf.batch_size[args.level], 'effective batch size = ', cf.eff_batch_size, ' acc = ', accumulation_steps, len(train_loader))
+    # print('batch size = ', cf.batch_size[args.level], 'effective batch size = ', cf.eff_batch_size, ' acc = ', accumulation_steps, len(train_loader))
     #normalization factors for the current dwt level
     print('loading stds ', cf.std_path)
     with open(cf.std_path, 'r') as f:
@@ -140,7 +140,7 @@ def main():
         N = 3
 
     mean_stds_all_levels = mean_stds_all_levels[str(dwt_level_number-1)]
-    print(dwt_level_number, mean_stds_all_levels)
+    # print(dwt_level_number, mean_stds_all_levels)
 
     nx = int(cf.imShape[-1]//(2**dwt_level_number))
     if p_level not in (cf.gauss_priors):
@@ -154,24 +154,26 @@ def main():
         # 3) Build dictionary {col_name -> col_index}
         colnames = list(df.columns)
         colname_to_index = {name: i for i, name in enumerate(colnames)}
-        if cf.unnormalize_prior == False:
+        print('Normalize prior = ', cf.normalize_prior[p_level])
+        if cf.unnormalize_prior[p_level] == False:
             norm_std = None
         else:
+            print('Unnormalizing prior with precomputed stds')
             norm_std = mean_stds_all_levels
-        prior = corr_prior.CorrelatedNormalDWTGeneral(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,cl_theo=power_spec,colname_to_index=colname_to_index,torch_device=device, freq=freq, n_channels=cf.imShape[0], prior_type=prior_type, norm_std=norm_std)
+        prior = corr_prior.CorrelatedNormalDWTGeneral(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,cl_theo=power_spec,colname_to_index=colname_to_index,torch_device=device, freq=freq, n_channels=cf.imShape[0], prior_type=prior_type, norm_std=norm_std, normalize=cf.normalize_prior[p_level])
     else:
         norm_std = None
         prior_type = 'WN'
         shape = (cf.batch_size[args.level], N*cf.imShape[0], nx, nx)
         prior = corr_prior.SimpleNormal(torch.zeros(shape).to(device), torch.ones(shape).to(device))
     p.net_type = cf.network[p_level]    
-    model = WaveletFlow(cf=p, cond_net=Conditioning_network(), partial_level=p_level, prior=prior, stds=mean_stds_all_levels, priortype=prior_type).to(device)
+    model = WaveletFlow(cf=p, cond_net=Conditioning_network(), partial_level=p_level, prior=prior, stds=mean_stds_all_levels, priortype=prior_type, device=device).to(device)
     print('Prior type = ', prior_type)
-    print('norm_std = ', norm_std)
+    # print('norm_std = ', norm_std)
     if resume:
         model.load_state_dict(torch.load(directory_path + selected_files[p_level-1]))
         print('loaded ', directory_path + selected_files[p_level-1], selected_files[p_level-1][19:-8])
-    optimizer = optim.Adam(model.parameters(), lr=cf.lr, weight_decay=cf.weight_decay)
+    optimizer = optim.Adam(model.parameters(), lr=cf.lr)
     
     lowest = 1e7
     patience = 0
@@ -182,7 +184,7 @@ def main():
         model = torch.nn.DataParallel(model)
 
     model = model.to(device)
-    print(model)
+    # print(model)
     model.train()
     ep = 1
     if resume:

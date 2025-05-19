@@ -73,8 +73,8 @@ def compute_and_accumulate_spectra(comp_a, comp_b, nx, dx):
     return spectra_sum, ell
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--config', type=str, default="configs/HCC_prior_best_model_256x256_all_levels_kap_noise_0.01.py", help='specify config')
-parser.add_argument('--output_dir', type=str, default="ps/256x256_kappa_noise_0.01_yuuki_2comps", help='missing output dir to save power spectra')
+parser.add_argument('--config', type=str, default="configs/CC_prior_best_model_256x256_all_levels_kap_no_noise.py", help='specify config')
+parser.add_argument('--output_dir', type=str, default="ps/256x256_kappa_no_noise_yuuki_kap_cib", help='missing output dir to save power spectra')
 args = parser.parse_args()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -112,7 +112,7 @@ dataset = My_lmdb(
 max_m = cf.nLevels - 1
 
 # including the 'low' components and high-frequency components.
-for m in range(0, max_m):
+for m in range(max_m):
     loader = DataLoader(dataset, batch_size=1024)
     util_obj = util()
     

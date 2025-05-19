@@ -23,6 +23,8 @@ import corr_prior
 import pandas as pd
 import json
 from quantimpy import minkowski
+import tqdm
+
 plt.style.use('ggplot')
 
 seed = 42 #786
@@ -35,8 +37,8 @@ torch.manual_seed(seed)
 torch.cuda.manual_seed(seed)
 torch.cuda.manual_seed_all(seed)
 torch.backends.cudnn.benchmark = False
-torch.backends.cudnn.deterministic = True
-torch.use_deterministic_algorithms(True)
+# torch.backends.cudnn.deterministic = True
+# torch.use_deterministic_algorithms(True)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.cuda.empty_cache()
 
@@ -142,8 +144,8 @@ def compute_and_plot_minkowski_functionals_no_prior(
         count_batches += 1
         target = batch.to(device)
         #noising data
-        target = apply_noise_torch_vectorized(target, cf.channels_to_get, cf.noise_dict)
-        target = scale_data_pt(target, cf.channels_to_get)
+        # target = apply_noise_torch_vectorized(target, cf.channels_to_get, cf.noise_dict)
+        # target = scale_data_pt(target, cf.channels_to_get)
 
         # Get final maps (Target, Sample)
         tar_map, smp_map = get_final_maps_from_model(
@@ -214,8 +216,8 @@ def compute_and_plot_minkowski_functionals_no_prior(
             print(f"Second pass Processed {i} iterations...")
 
         target = batch.to(device)
-        target = apply_noise_torch_vectorized(target, cf.channels_to_get, cf.noise_dict)
-        target = scale_data_pt(target, cf.channels_to_get)
+        # target = apply_noise_torch_vectorized(target, cf.channels_to_get, cf.noise_dict)
+        # target = scale_data_pt(target, cf.channels_to_get)
         
         tar_map, smp_map = get_final_maps_from_model(
             model, target, mean_stds_all_levels, cf, cond_on_target
@@ -406,20 +408,23 @@ def compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_lev
 
     accumulators = {}
     total_count = 0
-    
+
+    if cond_on_target:
+        print('NOTICE: conditioning on target, remove conditioning for real results')
+
     # Accumulate statistics across many batches
-    for i in range(max_iterations):
+    for i in tqdm.tqdm(range(max_iterations)):
         try:
             target = next(iter_loader).to(device)
         except StopIteration:
             break
         #noising data
-        target = apply_noise_torch_vectorized(target, cf.channels_to_get, cf.noise_dict)
-        target = scale_data_pt(target, cf.channels_to_get)
+        # target = apply_noise_torch_vectorized(target, cf.channels_to_get, cf.noise_dict)
+        # target = scale_data_pt(target, cf.channels_to_get)
 
         
-        if i % 10 == 0:
-            print(f"Processed {i} iterations... in {timer} seconds")
+        # if i % 10 == 0:
+        #     print(f"Processed {i} iterations... in {timer} seconds")
 
         latents = model.sample_latents(n_batch=cf.sample_batch_size)
         
@@ -438,9 +443,9 @@ def compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_lev
         B = target.shape[0]
         total_count += B
 
-        for lvl_idx, d_map in enumerate(data):
+        for lvl_idx, s_map in enumerate(samples):
             level = cf.baseLevel + lvl_idx
-            s_map = samples[lvl_idx]
+            d_map = data[lvl_idx]
             p_map = latents[level] if level < len(latents) else None
             if p_map is None:
                 continue
@@ -643,8 +648,8 @@ def compute_and_plot_bispectra(model, iter_loader, cf, mean_stds_all_levels, dev
             break
         print(i)    
         # Preprocess target
-        target = apply_noise_torch_vectorized(target, cf.channels_to_get, cf.noise_dict)
-        target = scale_data_pt(target, cf.channels_to_get)
+        # target = apply_noise_torch_vectorized(target, cf.channels_to_get, cf.noise_dict)
+        # target = scale_data_pt(target, cf.channels_to_get)
         
         # Generate samples (full map only)
         with torch.no_grad():
@@ -830,6 +835,8 @@ def main():
         #load prior for the level
         nx = int(cf.imShape[-1]//(2**dwt_level_number))
         mean_stds_this_levels = mean_stds_all_levels[str(dwt_level_number-1)]
+        print('Normalize data = ', cf.normalize[i])
+        print('Norm type = ', cf.norm_type[i])
         if p_level not in (cf.gauss_priors):
             dx = (0.5/60. * np.pi/180.)*(2**(dwt_level_number))
             rfourier_shape = (N*cf.imShape[0], nx, int(nx/2 + 1), 2)
@@ -842,16 +849,21 @@ def main():
             colnames = list(df.columns)
             colname_to_index = {name: i for i, name in enumerate(colnames)}
             priortype = prior_type
-
-            if cf.unnormalize_prior == False:
+            print('Normalize prior = ', cf.normalize_prior[i])
+            if cf.unnormalize_prior[i] == False:
                 norm_std = None
             else:
+                print('Unnormalizing prior with precomputed stds')
                 norm_std = mean_stds_this_levels
-            prior = corr_prior.CorrelatedNormalDWTGeneral(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,cl_theo=power_spec,colname_to_index=colname_to_index,torch_device=device, freq=freq, n_channels=cf.imShape[0], prior_type=prior_type, norm_std=norm_std)
+            prior = corr_prior.CorrelatedNormalDWTGeneral(torch.zeros(rfourier_shape), torch.ones(rfourier_shape),nx,dx,cl_theo=power_spec,colname_to_index=colname_to_index,torch_device=device, freq=freq, n_channels=cf.imShape[0], prior_type=prior_type, norm_std=norm_std, normalize=cf.normalize_prior[i])
         else:
+            if p_level == 200:
+                temperature = torch.tensor([1.05, 1.0, 1.0, 1.05, 1.05, 1.05], dtype=torch.float64).to(device).view(N*cf.imShape[0], 1, 1)
+            else:
+                temperature = 1.0
             priortype = 'WN'
             shape = (N*cf.imShape[0], nx, nx)
-            prior = corr_prior.SimpleNormal(torch.zeros(shape).to(device), torch.ones(shape).to(device))
+            prior = corr_prior.SimpleNormal(torch.zeros(shape).to(device), temperature*torch.ones(shape).to(device))
         
         p.net_type = p.network[i]
         # print('p_level', p_level, ' nx ', nx, ' dwt_level_number ', dwt_level_number, freq, N, priortype)
@@ -879,7 +891,7 @@ def main():
 
     bdir = cf.val_dataset_path
     file = "data.mdb"
-
+    print('dataset path = ', bdir)
     # Create the dataset
     dataset = My_lmdb(
         db_path=bdir,
@@ -888,8 +900,8 @@ def main():
         num_classes=1,
         class_cond=False,
         channels_to_use=cf.channels_to_get,
-        noise_dict={},        # noise only these channels
-        apply_scaling=False,           # do the scaling
+        noise_dict=cf.noise_dict,        # noise only these channels
+        apply_scaling=True,           # do the scaling
         data_shape=cf.data_shape       
     )
 
@@ -905,27 +917,27 @@ def main():
     start = time.time()
     iter_loader = iter(loader)
     print('Calculating the power spectra of low-frequency DWT components')
-    compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=False, cond_on_target=False, max_iterations=10)
+    compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=False, cond_on_target=True, max_iterations=10)
 
     iter_loader = iter(loader)
     print('Calculating the power spectra of high-frequency DWT components')
-    compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=True, cond_on_target=False, max_iterations=10)
+    compute_and_plot_all_power_spectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, nLevels=cf.nLevels, get_train_modes=True, cond_on_target=True, max_iterations=10)
 
-    iter_loader = iter(loader)
-    print('Calculating bispectrum of the final map')
-    compute_and_plot_bispectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, cond_on_target=False, max_iterations=50)
+#     iter_loader = iter(loader)
+#     print('Calculating bispectrum of the final map')
+#     compute_and_plot_bispectra(model, iter_loader, cf, mean_stds_all_levels, device, cf.plotSaveDir, cf.channels_to_get, cond_on_target=False, max_iterations=50)
 
-    print('Calculating Minkowski functionals of the final map')
-    compute_and_plot_minkowski_functionals_no_prior(
-    model, 
-    loader, 
-    cf, 
-    mean_stds_all_levels, 
-    device, 
-    cond_on_target=False,
-    n_thresholds=50,
-    max_iterations=len(loader),
-)
+#     print('Calculating Minkowski functionals of the final map')
+#     compute_and_plot_minkowski_functionals_no_prior(
+#     model, 
+#     loader, 
+#     cf, 
+#     mean_stds_all_levels, 
+#     device, 
+#     cond_on_target=False,
+#     n_thresholds=50,
+#     max_iterations=len(loader),
+# )
 
     print(time.time() - start)
 

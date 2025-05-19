@@ -15,6 +15,11 @@ class FlowStep(nn.Module):
         hidden_channels = params.hiddenChannels
         self.flow_permutation = params.perm
         self.flow_coupling = params.coupling
+
+        #remove soon
+        # if C == 2:
+        #     self.flow_coupling = "rqs"
+        # print("coupling = ", self.flow_coupling)
         self.actnorm = ActNorm2d(C, params.actNormScale)
 
         # # 2. permute
@@ -29,23 +34,23 @@ class FlowStep(nn.Module):
             self.flow_permutation = lambda z, logdet, rev: (self.reverse(z, rev), logdet,)
 
         # 3. coupling
-        if params.coupling == 'affine':
+        if self.flow_coupling == 'affine':
             self.coupling = Affine(C, C, hidden_channels, conditional)
-        elif params.coupling == 'checker':
+        elif self.flow_coupling == 'checker':
             self.coupling = MyCheckerboard(C, C, H, W, hidden_channels, idx%2, conditional, params.net_type, device=device)
-        elif params.coupling == 'rqs':
+        elif self.flow_coupling == 'rqs':
             self.coupling = MyCheckerboardRQS(C, C, H, W, hidden_channels, idx%2, conditional, params.net_type)
-        elif params.coupling == 'rqs_per_c':
+        elif self.flow_coupling == 'rqs_per_c':
             self.coupling = MyCheckerboardRQS_per_channel(C, C, H, W, hidden_channels, idx%2, conditional, params.net_type)
-        elif params.coupling == 'fully_active_rqs':
+        elif self.flow_coupling == 'fully_active_rqs':
             self.coupling = MyFullyActiveRQS(C, C, H, W, hidden_channels, conditional, params.net_type)
-        elif params.coupling == 'checker3d':
+        elif self.flow_coupling == 'checker3d':
             self.coupling = Checkerboard3D(C, C, H, W, hidden_channels, conditional)
-        elif params.coupling == 'cycle':
+        elif self.flow_coupling == 'cycle':
             self.coupling = CycleMask(C, C, H, W, hidden_channels, idx, conditional)
-        elif params.coupling == 'radial':
+        elif self.flow_coupling == 'radial':
             self.coupling = RadialMask(C, C, H, W, hidden_channels, idx, conditional)
-        elif params.coupling == 'horizontal':
+        elif self.flow_coupling == 'horizontal':
             self.coupling = HorizontalChain(C, C, H, W, hidden_channels, idx, conditional)
     
     def forward(self, input, conditioning, logdet, reverse=False):
@@ -57,8 +62,9 @@ class FlowStep(nn.Module):
     def normal_flow(self, input, conditioning, logdet):
         # 1. actnorm
         z, logdet = self.actnorm(input, logdet=logdet)
-        # 2. permute
-        z, logdet = self.flow_permutation(z, logdet, False)
+        if self.flow_permutation is not None:
+            # 2. permute
+            z, logdet = self.flow_permutation(z, logdet, False)
         # 3. coupling
         z, logdet = self.coupling(z, logdet, conditioning)
         return z, logdet
@@ -68,9 +74,9 @@ class FlowStep(nn.Module):
         # 1.coupling
         z, logdet = self.coupling(input, logdet, conditioning, reverse=True)
 
-        # 2. permute
-        z, logdet = self.flow_permutation(z, logdet, True)
-
+        if self.flow_permutation is not None:
+            # 2. permute
+            z, logdet = self.flow_permutation(z, logdet, True)
         # 3. actnorm
         z, logdet = self.actnorm(z, logdet=logdet, reverse=True)
 

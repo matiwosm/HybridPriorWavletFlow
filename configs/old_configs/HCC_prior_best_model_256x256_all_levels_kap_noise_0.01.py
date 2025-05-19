@@ -38,7 +38,8 @@ y_weight = None  # Weighting factor for the class-conditional loss (not used if 
 # Prior configurations.
 priorType = 'CC'  # Specifies the type of prior: 'CC' for component-correlated priors or 'C' for independent component priors (i.e. no cross correlations).
 gauss_priors = [1, 2, 3, 4, 5, 6, 7]  # DWT levels using a Gaussian (white noise) prior. For a white noise prior, include all levels in this list.
-unnormalize_prior = True  # If True, scales the correlated prior to match the data's amplitude. 
+unnormalize_prior = [True]*10  # If True, scales the correlated prior to match the data's amplitude. 
+normalize_prior = [False]*10
 
 # Dataset configurations.
 dataset = 'My_lmdb'  # Replace 'My_lmdb' with your dataset. Currently configured for Agora simulations only.

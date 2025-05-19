@@ -1,6 +1,6 @@
 # Hybrid-Prior WaveletFlow
 
-This repository extends the WaveletFlowPyTorch project, originally found here: [WaveletFlowPyTorch](https://github.com/A-Vzer/WaveletFlowPytorch).
+This repository extends the WaveletFlowPyTorch project, originally found here: [WaveletFlowPyTorch](https://github.com/A-Vzer/WaveletFlowPytorch). 
 
 ## Installation
 
@@ -14,7 +14,7 @@ The code has been tested with Python 3.10.
 
 ## Overview
 
-This project introduces scripts for handling Discrete Wavelet Transforms (DWT) and training a WaveletFlow model with hybrid priors. Below is a summary of the main functionalities:
+This project includes scripts for handling the training and sampling of Wavelet Flow models with hybrid priors. Below is a summary of the main functionalities:
 
 ## Key Features
 
@@ -106,8 +106,4 @@ Ensure that the training and sampling scripts use the same configuration file.
    ```bash
    python Sample_test.py --config config/config_file.py
    ```
-
-## Contributions
-
-This project has been enhanced by Matiwos Mebratu to support hybrid priors and implement inverse transformations for sampling.
-
+git@github.com:matiwosm/SampleHybridPriorWavletFlow.git includes the scrts used to generate the plots in our paper. 

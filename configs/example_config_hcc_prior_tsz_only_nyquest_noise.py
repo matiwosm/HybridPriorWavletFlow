@@ -23,7 +23,8 @@ LU = True
 #prior
 gauss_priors = [1,2,3,4,5] #set this for HCC prior. For WN prior, add all the layers to this list
 priorType = 'CC' #Choose 'CC' or 'C'
-unnormalize_prior = True
+unnormalize_prior = [True]*10
+normalize_prior = [False]*10
 
 #datset configs 
 dataset = 'My_lmdb'   #replace with 'My_lmdb' with your dataset
