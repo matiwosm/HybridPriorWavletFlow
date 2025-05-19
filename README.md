@@ -1,6 +1,6 @@
 # Hybrid-Prior WaveletFlow
 
-This repository extends the WaveletFlowPyTorch project, originally found here: [WaveletFlowPyTorch](https://github.com/A-Vzer/WaveletFlowPytorch). 
+This repository extends the WaveletFlowPyTorch project, originally found here: [WaveletFlowPyTorch](https://github.com/A-Vzer/WaveletFlowPytorch). We added inverse sampling and other functionalites needed for our work. 
 
 ## Installation
 
